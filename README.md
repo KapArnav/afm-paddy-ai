@@ -6,17 +6,18 @@ AFM Paddy AI is an intelligent, full-stack web application designed for Malaysia
 
 ## 🚀 Features Implemented
 
-### 🤖 AI Farm Plan Generation
-- Accepts crop health, market conditions, and optimization goals
-- Powered by **Google Gemini 2.5 Flash** via native `fetch()` — no external SDK
-- Returns a fully structured JSON plan including:
-  - 30-day action timeline (water, fertilizer, pest, harvest, monitor, soil)
-  - Hidden risk identification
-  - Market strategy
-  - AI reasoning explanations
-  - Confidence score
-  - Image analysis (when crop photo is provided)
-- **Automatic retry system**: If Gemini returns a 503 busy error, the system automatically waits 1.5s and retries once before failing
+### 🤖 Multi-Agent AI Farm Intelligence
+- **Autonomous Multi-Agent Orchestration**: Centrally coordinates specialized agents:
+  - **🌤️ Weather Agent**: Real-time environmental analysis.
+  - **📈 Market Agent**: Realistic demand and price trend simulation.
+  - **🖼️ Visual Agent**: Gemini Vision-powered crop health detection.
+- Powered by **Google Gemini 2.5 Flash** (v1 stable)
+- Returns a fully synthesized JSON plan including:
+  - 30-day action timeline with category-specific tasks
+  - Hidden risk identification and smart insights
+  - Market strategy aligned with real-time demand
+  - AI reasoning from all sensor agents
+- **Automatic retry system**: Robust 1.5s retry logic for handling Gemini API busy states.
 
 ### 🌤️ Live Weather Integration
 - Real-time weather data fetched from **OpenWeatherMap API**
@@ -203,6 +204,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 | `feature/firebase-integration` | Full Firebase persistence layer |
 | `feature/image-analysis` | Gemini Vision analysis endpoint |
 | `feature/market-api` | Realistic market trend simulation |
+| `feature/full-integration` | Multi-agent state-of-the-art system integration |
 
 ---
 
