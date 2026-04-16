@@ -35,7 +35,7 @@ interface GeminiResponse {
 
 // ── POST handler ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  console.log("API HIT");
+  console.log("API HIT: Autonomous Multi-Agent System");
 
   // 1. Check API key
   const apiKey = process.env.GEMINI_API_KEY;
@@ -57,123 +57,112 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Extract form data with safe defaults
-  const fd = body?.formData ?? {};
-  
-  const weatherRes = await fetch("http://localhost:3000/api/weather");
-  if (!weatherRes.ok) {
-    return NextResponse.json(
-      { error: "Failed to fetch weather data" },
-      { status: 500 }
-    );
+  // 3. Setup dynamic base URL for internal agents
+  const baseUrl = req.nextUrl.origin;
+
+  // --- AGENT: WEATHER ---
+  console.log("[Agent: Weather] Gathering environmental data...");
+  let weather;
+  try {
+    const weatherRes = await fetch(`${baseUrl}/api/weather`);
+    if (!weatherRes.ok) throw new Error("Weather service offline");
+    weather = await weatherRes.json();
+  } catch (err) {
+    console.error("[Agent: Weather] Error, using defaults:", err);
+    weather = { temperature: 28, humidity: 75, rain_probability: 20 };
   }
-  const weather = await weatherRes.json();
 
   const rainForecast = `${weather.rain_probability}% chance of rain`;
   const temperature = weather.temperature;
   const humidity = weather.humidity;
+
+  // --- AGENT: MARKET ---
+  console.log("[Agent: Market] Fetching current crop trends...");
+  let marketData;
+  try {
+    const marketRes = await fetch(`${baseUrl}/api/market`);
+    if (!marketRes.ok) throw new Error("Market service offline");
+    marketData = await marketRes.json();
+  } catch (err) {
+    console.error("[Agent: Market] Error, using fallbacks:", err);
+    marketData = { price_trend: "stable", demand: "medium", recommendation: "hold" };
+  }
+
+  // --- AGENT: VISUAL (OPTIONAL) ---
+  const hasImage = !!(body.image && body.imageMimeType);
+  let imageAnalysis = { issues: [], confidence: 0 };
+
+  if (hasImage) {
+    console.log("[Agent: Visual] Analyzing crop imagery...");
+    try {
+      const visualRes = await fetch(`${baseUrl}/api/analyze-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: body.image })
+      });
+      if (visualRes.ok) {
+        imageAnalysis = await visualRes.json();
+      } else {
+        console.error("[Agent: Visual] Busy or error, bypassing image analysis");
+      }
+    } catch (err) {
+      console.error("[Agent: Visual] Fetch error:", err);
+    }
+  }
+
+  // 4. Build Enriched Autonomous Strategist Prompt
+  const fd = body?.formData ?? {};
   const growthStage = fd.growthStage ?? "Tillering";
   const leafColor = fd.leafColor ?? "Normal Green";
   const pestPresence = fd.pestPresence ?? false;
-  const priceTrend = fd.priceTrend ?? "Stable";
-  const demand = fd.demand ?? "Medium";
   const optimizeFor = body.optimizeFor ?? "balanced";
 
-  const hasImage = body.image && body.imageMimeType;
+  const imageContext = imageAnalysis.issues.length > 0 
+    ? `VISUAL AGENT FINDINGS: ${imageAnalysis.issues.join(", ")} (Confidence: ${Math.round(imageAnalysis.confidence * 100)}%)`
+    : "VISUAL AGENT: No critical visual issues reported or image not provided.";
 
-  // 4. Build prompt
-  const optimizeInstruction =
-    optimizeFor === "profit"
-      ? "PRIORITIZE maximizing farmer profit. Recommend selling strategies, timing, and cost reduction."
-      : optimizeFor === "yield"
-        ? "PRIORITIZE maximizing crop yield. Recommend best agronomic practices regardless of short-term costs."
-        : "BALANCE between profit and yield for sustainable farming.";
+  const prompt = `You are a Multi-Agent Autonomous Farm Strategist.
+Your intelligence is synthesized from specialized vision, weather, and market agents.
 
-  const imageInstruction = hasImage
-    ? `
+SYNTHESIZED INPUT DATA:
 
-IMPORTANT: An image of the crop has been provided. Analyze it carefully for:
-- Visible diseases (blast, brown spot, bacterial leaf blight)
-- Nutrient deficiency symptoms (nitrogen, phosphorus, potassium)
-- Water stress or drought symptoms
-- Pest damage signs
-- General crop vigor
-You MUST populate the "image_analysis" array with your findings from the image.`
-    : "";
-
-  const prompt = `You are an expert Malaysian paddy (rice) farming consultant with deep knowledge of agronomy, market dynamics, and precision farming.
-
-Analyze the following farm data and produce an actionable, intelligent farm plan.
-
-=== WEATHER ===
-- Rain Forecast: ${rainForecast}
+=== ENVIRONMENTAL DATA (WEATHER AGENT) ===
+- Rain Probability: ${weather.rain_probability}%
 - Temperature: ${temperature}°C
 - Humidity: ${humidity}%
 
-=== CROP HEALTH ===
+=== CROP HEALTH DATA (USER + VISION AGENT) ===
 - Growth Stage: ${growthStage}
-- Leaf Color: ${leafColor}
-- Pest Presence: ${pestPresence ? "Yes" : "No"}
+- Leaf Color Indicator: ${leafColor}
+- Manual Pest Detection: ${pestPresence ? "Yes" : "No"}
+- ${imageContext}
 
-=== MARKET ===
-- Price Trend: ${priceTrend}
-- Demand: ${demand}
+=== MARKET DATA (MARKET AGENT) ===
+- Price Trend: ${marketData.price_trend}
+- Demand Level: ${marketData.demand}
+- Market Agent Logic: ${marketData.recommendation}
 
-=== OPTIMIZATION ===
-${optimizeInstruction}
-${imageInstruction}
+=== OBJECTIVE ===
+Optimize for ${optimizeFor.toUpperCase()}.
 
-=== REASONING (CRITICAL) ===
-You MUST explain your reasoning. Think like an agronomist + farmer + strategist.
-Detect hidden risks such as:
-- Heavy rain + nitrogen → leaching risk
-- High humidity + warmth → fungal disease
-- Yellowing leaves during tillering → yield loss
-- Pest presence during panicle initiation → critical risk
+INSTRUCTIONS:
+1. Synthesize all data points. Detect non-obvious correlations (e.g., high rain + market sell signals -> harvest timing issues).
+2. Generate a 30-day action timeline with category-specific tasks.
+3. Formulate a market strategy that respects the market agent's signals but adjusts for the crop health.
+4. Detect hidden risks the farmer might overlook.
 
-Respond with ONLY valid JSON matching this exact schema — no markdown, no explanations, no text outside JSON:
-
+Return ONLY valid JSON:
 {
-  "farm_summary": {
-    "overall_risk": "<Low|Medium|High>",
-    "key_issue": "<one sentence describing the most critical issue>"
-  },
-  "confidence_score": <number 70-98, your confidence percentage in this plan based on data completeness>,
-  "smart_insight": {
-    "hidden_risk": "<describe ONE non-obvious hidden risk the farmer might miss, e.g. nutrient leaching, fungal outbreak window, timing conflict>",
-    "recommendation": "<one-sentence actionable advice to mitigate this hidden risk>"
-  },
-  "image_analysis": ${hasImage ? `[
-    "<finding 1 from crop image, e.g. 'Mild chlorosis detected on lower leaves'>",
-    "<finding 2, e.g. 'No visible pest damage'>",
-    "<finding 3, e.g. 'Possible nitrogen deficiency based on leaf color pattern'>"
-  ]` : `[]`},
-  "timeline": [
-    {
-      "day": <number 1-30>,
-      "action": "<specific action the farmer should do>",
-      "reason": "<why this action at this time>",
-      "priority": "<High|Medium|Low>",
-      "category": "<water|fertilizer|pest|harvest|monitor|soil>"
-    }
-  ],
-  "market_strategy": {
-    "action": "<specific selling/holding/pricing recommendation>",
-    "reason": "<market-based justification>"
-  },
-  "ai_reasoning": [
-    "<reasoning point 1 — explain a hidden risk or trade-off you detected>",
-    "<reasoning point 2 — explain why a key decision was made>",
-    "<reasoning point 3 — explain what would happen if farmer ignores this>",
-    "<reasoning point 4 — explain an optimization insight>",
-    "<reasoning point 5 — explain environmental or seasonal context>"
-  ]
+  "farm_summary": { "overall_risk": "Low/Medium/High", "key_issue": "string" },
+  "confidence_score": number (70-98),
+  "smart_insight": { "hidden_risk": "string", "recommendation": "string" },
+  "image_analysis": string[],
+  "timeline": [{ "day": number, "action": "string", "reason": "string", "priority": "High/Medium/Low", "category": "water/fertilizer/pest/harvest/monitor/soil" }],
+  "market_strategy": { "action": "string", "reason": "string" },
+  "ai_reasoning": string[] // exactly 5 concise bullets
 }
 
-Include at least 6 timeline entries covering the full 30-day window.
-Include exactly 5 ai_reasoning entries — keep each to 1-2 concise sentences.
-Each timeline entry MUST have a category from: water, fertilizer, pest, harvest, monitor, soil.
-Return ONLY the JSON object.`;
+Return ONLY raw JSON. No markdown.`;
 
   // 5. Build request parts
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
@@ -189,7 +178,7 @@ Return ONLY the JSON object.`;
     });
   }
 
-  // 6. Call Gemini API via fetch (NO SDK, v1 stable, gemini-2.5-flash)
+  // 6. Call Gemini API via fetch (v1 stable, gemini-2.5-flash)
   const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const fetchOptions = {
@@ -211,107 +200,57 @@ Return ONLY the JSON object.`;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       geminiRes = await fetch(endpoint, fetchOptions);
-      if (geminiRes.ok) {
-        break; // Success! Exit the retry loop.
-      }
+      if (geminiRes.ok) break;
       errStatus = geminiRes.status;
       errDetail = await geminiRes.text();
-      console.error(`Gemini API error (Attempt ${attempt}):`, errStatus, errDetail);
-    } catch (err: unknown) {
-      errDetail = err instanceof Error ? err.message : "Unknown fetch error";
-      console.error(`Gemini fetch error (Attempt ${attempt}):`, errDetail);
+    } catch (err: any) {
+      errDetail = err.message;
     }
-
-    if (attempt === 1) {
-      console.log("Retrying Gemini API in 1.5 seconds...");
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    }
+    if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
   }
 
-  // 7. Check HTTP status after retries
   if (!geminiRes || !geminiRes.ok) {
-    return NextResponse.json(
-      { error: "Failed to reach Gemini API after retries", status: errStatus, detail: errDetail },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "Gemini API failure", status: errStatus, detail: errDetail }, { status: 502 });
   }
 
-  // 8. Parse Gemini response
-  let data: GeminiResponse;
-  try {
-    data = await geminiRes.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to parse Gemini response as JSON" },
-      { status: 502 }
-    );
-  }
+  // 7. Parse & Clean JSON
+  const resultData: GeminiResponse = await geminiRes.json();
+  const rawText = resultData?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) return NextResponse.json({ error: "Empty AI response" }, { status: 502 });
 
-  // 9. Extract text from candidates
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    console.error("No text in Gemini response:", JSON.stringify(data));
-    return NextResponse.json(
-      { error: "Gemini returned no text content", raw: data },
-      { status: 502 }
-    );
-  }
-
-  // 10. Clean & parse JSON
-  let cleaned = rawText.trim();
-  cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
-  cleaned = cleaned.replace(/\s*```$/i, "");
-  cleaned = cleaned.trim();
-
-  let parsed: unknown;
+  let cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  let parsed: any;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    console.error("Failed to parse Gemini text as JSON:", cleaned);
-    return NextResponse.json(
-      { error: "Gemini response was not valid JSON", raw_text: cleaned },
-      { status: 502 }
-    );
+  } catch (e) {
+    return NextResponse.json({ error: "Invalid plan JSON", raw_text: cleaned }, { status: 502 });
   }
 
-  // 11. Generate smart alerts from weather + plan
+  // 8. Generate Enriched Alerts
   const alerts: string[] = [];
-  if (weather.rain_probability > 70) {
-    alerts.push("High rain expected — delay fertilizer application to avoid leaching");
+  if (weather.rain_probability > 70) alerts.push("High rain expected — delay fertilizer application.");
+  if (weather.temperature > 35) alerts.push("Extreme heat detected — ensure extra irrigation.");
+  if (marketData.price_trend === "decreasing" && marketData.demand === "high") {
+    alerts.push("Market Alert: Price falling despite high demand. Consider selling soon.");
   }
-  if (weather.temperature > 35) {
-    alerts.push("Heat stress risk — ensure adequate irrigation and monitor crop health");
-  }
-  if (weather.humidity > 85) {
-    alerts.push("High humidity — elevated fungal disease risk, consider preventive fungicide");
-  }
-  const planAny = parsed as any;
-  if (planAny?.farm_summary?.overall_risk === "High") {
-    alerts.push("High overall farm risk — follow the action plan closely");
-  }
-  if (pestPresence) {
-    alerts.push("Active pest presence — prioritize pest management immediately");
-  }
+  if (parsed.farm_summary.overall_risk === "High") alerts.push("Risk Alert: Farm is in a high-risk state.");
 
-  // 12. Save plan to Firestore (non-blocking — won't fail the API if Firestore write fails)
-  const imageUrl: string | null = null; // Will be populated when image upload is integrated
+  // 9. Save to Firestore (Enriched Schema)
   try {
     await addDoc(collection(db, "farmPlans"), {
       weather: { temperature, humidity, rain_probability: weather.rain_probability },
       crop_health: { growthStage, leafColor, pestPresence },
-      market: { priceTrend, demand },
-      optimizeFor,
-      imageUrl,
+      market: marketData,
+      image_issues: imageAnalysis.issues || [],
+      imageUrl: hasImage ? "Image provided (Base64)" : null,
       farmPlan: parsed,
       alerts,
       createdAt: new Date(),
     });
-    console.log("Farm plan saved to Firestore");
+    console.log("Autonomous plan saved to Firestore");
   } catch (firestoreErr: any) {
-    console.error("Firestore save failed (non-fatal):", firestoreErr.message);
+    console.error("Firestore persistence skipped:", firestoreErr.message);
   }
 
-  // 13. Return successful response
-  console.log("API SUCCESS");
   return NextResponse.json({ success: true, plan: parsed, alerts });
 }
