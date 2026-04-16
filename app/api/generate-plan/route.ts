@@ -56,9 +56,19 @@ export async function POST(req: NextRequest) {
 
   // 3. Extract form data with safe defaults
   const fd = body?.formData ?? {};
-  const rainForecast = fd.rainForecast ?? "Moderate";
-  const temperature = fd.temperature ?? 30;
-  const humidity = fd.humidity ?? 70;
+  
+  const weatherRes = await fetch("http://localhost:3000/api/weather");
+  if (!weatherRes.ok) {
+    return NextResponse.json(
+      { error: "Failed to fetch weather data" },
+      { status: 500 }
+    );
+  }
+  const weather = await weatherRes.json();
+
+  const rainForecast = `${weather.rain_probability}% chance of rain`;
+  const temperature = weather.temperature;
+  const humidity = weather.humidity;
   const growthStage = fd.growthStage ?? "Tillering";
   const leafColor = fd.leafColor ?? "Normal Green";
   const pestPresence = fd.pestPresence ?? false;
@@ -179,34 +189,46 @@ Return ONLY the JSON object.`;
   // 6. Call Gemini API via fetch (NO SDK, v1 stable, gemini-2.5-flash)
   const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-  let geminiRes: Response;
-  try {
-    geminiRes = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown fetch error";
-    console.error("Gemini fetch error:", message);
-    return NextResponse.json(
-      { error: "Failed to reach Gemini API", detail: message },
-      { status: 502 }
-    );
+  const fetchOptions = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+      },
+    }),
+  };
+
+  let geminiRes: Response | undefined;
+  let errStatus = 502;
+  let errDetail = "";
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      geminiRes = await fetch(endpoint, fetchOptions);
+      if (geminiRes.ok) {
+        break; // Success! Exit the retry loop.
+      }
+      errStatus = geminiRes.status;
+      errDetail = await geminiRes.text();
+      console.error(`Gemini API error (Attempt ${attempt}):`, errStatus, errDetail);
+    } catch (err: unknown) {
+      errDetail = err instanceof Error ? err.message : "Unknown fetch error";
+      console.error(`Gemini fetch error (Attempt ${attempt}):`, errDetail);
+    }
+
+    if (attempt === 1) {
+      console.log("Retrying Gemini API in 1.5 seconds...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
   }
 
-  // 7. Check HTTP status
-  if (!geminiRes.ok) {
-    const errBody = await geminiRes.text();
-    console.error("Gemini API error:", geminiRes.status, errBody);
+  // 7. Check HTTP status after retries
+  if (!geminiRes || !geminiRes.ok) {
     return NextResponse.json(
-      { error: "Gemini API returned an error", status: geminiRes.status, detail: errBody },
+      { error: "Failed to reach Gemini API after retries", status: errStatus, detail: errDetail },
       { status: 502 }
     );
   }
