@@ -6,10 +6,11 @@ AFM Paddy AI is an intelligent, responsive web application designed for Malaysia
 
 ## 🚀 Features Implemented So Far
 
-- **Interactive Farm Input Form**: A comprehensive UI allowing farmers to input weather conditions, growth stages, leaf colors, pricing trends, and market demands.
+- **Interactive Farm Input Form**: A comprehensive UI allowing farmers to input growth stages, leaf colors, pricing trends, and market demands.
+- **Live Weather Integration**: Real-time integration with OpenWeather API (`/api/weather`) that automatically gathers local temperature, humidity, and rain probability to dynamically adapt farming decisions without manual data entry.
 - **Crop Image Analysis Upload**: Farmers can upload an image of their crop. The system converts it to Base64 and passes it to the AI to visually detect diseases, nutrient deficiencies, or pest presence.
 - **Dynamic Risk Meter UI**: A beautifully designed, color-coded visual indicator displaying the overall calculated risk level of the farm at a glance.
-- **Gemini API Integration**: A server-side Next.js route (`/api/generate-plan/route.ts`) that acts as a secure bridge, calling the Google Gemini 2.5 Flash API directly using native `fetch()`. No external SDKs are required.
+- **Robust Gemini API Integration**: A server-side Next.js route (`/api/generate-plan/route.ts`) that acts as a secure bridge, calling the Google Gemini 2.5 Flash API directly via native `fetch()`. It includes a custom asynchronous retry system with fallback logic to guarantee app stability even during cloud AI traffic spikes.
 - **Smart Analytics Engine**: The AI returns structured JSON containing:
   - Timeline of actions (water, fertilizer, pest management)
   - Immediate hidden risk identification
@@ -35,6 +36,7 @@ Before you begin, ensure you have the following installed:
 - **Node.js**: Version 20.x or higher is recommended. You can download it from [nodejs.org](https://nodejs.org/).
 - **Git**: To clone and manage your project repository.
 - **Gemini API Key**: You will need a developer API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+- **OpenWeather API Key**: You will need a free weather API key from [OpenWeatherMap](https://openweathermap.org/api).
 
 ---
 
@@ -58,6 +60,7 @@ Create a file named `.env.local` in the root directory (`afm-paddy-ai/`) and add
 
 ```env
 GEMINI_API_KEY=your_actual_gemini_api_key_here
+WEATHER_API_KEY=your_actual_openweather_key_here
 ```
 *(Note: Never commit your `.env.local` to GitHub. The project already uses `.gitignore` to prevent this.)*
 
