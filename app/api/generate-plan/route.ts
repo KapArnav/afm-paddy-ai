@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "../../../lib/firebase";
+
 
 // ── Types ───────────────────────────────────────────────────────────
 interface FormInput {
@@ -271,7 +274,44 @@ Return ONLY the JSON object.`;
     );
   }
 
-  // 11. Return successful response
+  // 11. Generate smart alerts from weather + plan
+  const alerts: string[] = [];
+  if (weather.rain_probability > 70) {
+    alerts.push("High rain expected — delay fertilizer application to avoid leaching");
+  }
+  if (weather.temperature > 35) {
+    alerts.push("Heat stress risk — ensure adequate irrigation and monitor crop health");
+  }
+  if (weather.humidity > 85) {
+    alerts.push("High humidity — elevated fungal disease risk, consider preventive fungicide");
+  }
+  const planAny = parsed as any;
+  if (planAny?.farm_summary?.overall_risk === "High") {
+    alerts.push("High overall farm risk — follow the action plan closely");
+  }
+  if (pestPresence) {
+    alerts.push("Active pest presence — prioritize pest management immediately");
+  }
+
+  // 12. Save plan to Firestore (non-blocking — won't fail the API if Firestore write fails)
+  const imageUrl: string | null = null; // Will be populated when image upload is integrated
+  try {
+    await addDoc(collection(db, "farmPlans"), {
+      weather: { temperature, humidity, rain_probability: weather.rain_probability },
+      crop_health: { growthStage, leafColor, pestPresence },
+      market: { priceTrend, demand },
+      optimizeFor,
+      imageUrl,
+      farmPlan: parsed,
+      alerts,
+      createdAt: new Date(),
+    });
+    console.log("Farm plan saved to Firestore");
+  } catch (firestoreErr: any) {
+    console.error("Firestore save failed (non-fatal):", firestoreErr.message);
+  }
+
+  // 13. Return successful response
   console.log("API SUCCESS");
-  return NextResponse.json({ success: true, plan: parsed });
+  return NextResponse.json({ success: true, plan: parsed, alerts });
 }
