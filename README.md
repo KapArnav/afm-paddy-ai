@@ -56,6 +56,16 @@ AFM Paddy AI is an intelligent, full-stack web application designed for Malaysia
 - `GET /api/user?userId=xxx` — Retrieve user profile
 - Stored in Firestore `users` collection with merge support
 
+### 🖼️ AI Image Analysis
+- Dedicated endpoint at `/api/analyze-image`
+- Powered by **Gemini 1.5 Flash** (Vision)
+- Identifies visible agricultural issues:
+  - Nutrient deficiencies
+  - Pest damage
+  - Disease symptoms
+  - Leaf discoloration
+- Returns high-confidence detections in structured JSON
+
 ### 🖼️ Firebase Storage Support (Helper Ready)
 - `uploadImage(file: Blob)` helper exported from `lib/firebase.ts`
 - Uploads images to Firebase Storage under `farm-images/`
@@ -89,6 +99,7 @@ afm-paddy-ai/
 ├── app/
 │   ├── api/
 │   │   ├── generate-plan/   # Core AI farm plan generation
+│   │   ├── analyze-image/   # Gemini Vision crop analysis
 │   │   ├── weather/         # Real-time OpenWeather integration
 │   │   ├── farm-history/    # Firestore history + pattern detection
 │   │   ├── user/            # User profile CRUD
@@ -165,6 +176,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/generate-plan` | Generate AI farm plan (saves to Firestore) |
+| `POST` | `/api/analyze-image` | Analyze crop image for diseases/pests |
 | `GET` | `/api/weather` | Fetch real-time weather for Kedah |
 | `GET` | `/api/farm-history` | Fetch last 10 plans + pattern detection |
 | `POST` | `/api/user` | Save/update user profile |
@@ -181,6 +193,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 | `feature/weather-api` | OpenWeather API integration |
 | `feature/integrate-weather` | Injecting weather data into AI prompt |
 | `feature/firebase-integration` | Full Firebase persistence layer |
+| `feature/image-analysis` | Gemini Vision analysis endpoint |
 
 ---
 
