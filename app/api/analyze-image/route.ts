@@ -48,7 +48,7 @@ Return ONLY valid JSON in this format:
 
 Do not include markdown or explanations.`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
   // 4. Call Gemini API
   let geminiRes: Response;

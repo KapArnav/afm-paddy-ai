@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
+import BottomNav from "./components/ui/BottomNav";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const outfit = Outfit({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-outfit",
 });
 
 export const metadata: Metadata = {
-  title: "AFM Paddy AI — Malaysian Paddy Farming Assistant",
-  description: "AI-powered farming assistant for Malaysian paddy farmers. Get actionable farm plans using weather, crop health, and market data.",
+  title: "Autonomous Farm Manager",
+  description: "AI-powered farming intelligence for the modern farmer.",
 };
 
 export default function RootLayout({
@@ -23,11 +19,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en">
+      <body className={`${outfit.variable} font-sans bg-background text-foreground`}>
+        {/* Mobile Container */}
+        <div className="min-h-screen flex flex-col items-center">
+          <main className="w-full max-w-[440px] flex-grow relative bg-background pb-24 min-h-screen">
+            {children}
+            <BottomNav />
+          </main>
+        </div>
+      </body>
     </html>
   );
 }

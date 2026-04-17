@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -16,6 +17,7 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const db = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
 /**
  * Upload a Blob image to Firebase Storage under "farm-images/"
@@ -29,4 +31,4 @@ async function uploadImage(file: Blob): Promise<string> {
   return url;
 }
 
-export { app, db, storage, uploadImage };
+export { app, db, storage, auth, uploadImage };

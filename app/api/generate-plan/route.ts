@@ -20,6 +20,7 @@ interface RequestBody {
   image?: string | null;       // base64
   imageMimeType?: string | null;
   optimizeFor?: string;        // "balanced" | "profit" | "yield"
+  userId?: string;             // Linking plan to user
 }
 
 interface GeminiCandidate {
@@ -72,7 +73,6 @@ export async function POST(req: NextRequest) {
     weather = { temperature: 28, humidity: 75, rain_probability: 20 };
   }
 
-  const rainForecast = `${weather.rain_probability}% chance of rain`;
   const temperature = weather.temperature;
   const humidity = weather.humidity;
 
@@ -146,10 +146,10 @@ SYNTHESIZED INPUT DATA:
 Optimize for ${optimizeFor.toUpperCase()}.
 
 INSTRUCTIONS:
-1. Synthesize all data points. Detect non-obvious correlations (e.g., high rain + market sell signals -> harvest timing issues).
-2. Generate a 30-day action timeline with category-specific tasks.
-3. Formulate a market strategy that respects the market agent's signals but adjusts for the crop health.
-4. Detect hidden risks the farmer might overlook.
+1. Synthesize all data points (Vision, Weather, Market). Detect non-obvious correlations (e.g., high rain probability + market sell signals -> prioritize immediate harvest vs fertilization).
+2. Generate a 30-day action timeline.
+3. Formulate a specific Market Strategy. You MUST provide a clear "action" (e.g. SELL, HOLD, WAIT, SCALE) and a compelling "reason" based on the synthesized agents.
+4. Detect hidden risks.
 
 Return ONLY valid JSON:
 {
@@ -157,8 +157,15 @@ Return ONLY valid JSON:
   "confidence_score": number (70-98),
   "smart_insight": { "hidden_risk": "string", "recommendation": "string" },
   "image_analysis": string[],
-  "timeline": [{ "day": number, "action": "string", "reason": "string", "priority": "High/Medium/Low", "category": "water/fertilizer/pest/harvest/monitor/soil" }],
-  "market_strategy": { "action": "string", "reason": "string" },
+  "timeline": [{ 
+    "day": number, 
+    "action": "string", 
+    "reason": "string", 
+    "steps": string[], // exactly 3 specific implementation steps
+    "priority": "High/Medium/Low", 
+    "category": "water/fertilizer/pest/harvest/monitor/soil" 
+  }],
+  "market_strategy": { "action": "string (MUST BE NON-EMPTY)", "reason": "string (MUST BE NON-EMPTY)" },
   "ai_reasoning": string[] // exactly 5 concise bullets
 }
 
@@ -178,8 +185,8 @@ Return ONLY raw JSON. No markdown.`;
     });
   }
 
-  // 6. Call Gemini API via fetch (v1 stable, gemini-2.5-flash)
-  const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // 6. Call Gemini API via fetch (v1beta, gemini-flash-latest)
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
   const fetchOptions = {
     method: "POST",
@@ -218,11 +225,11 @@ Return ONLY raw JSON. No markdown.`;
   const rawText = resultData?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!rawText) return NextResponse.json({ error: "Empty AI response" }, { status: 502 });
 
-  let cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
   let parsed: any;
   try {
     parsed = JSON.parse(cleaned);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Invalid plan JSON", raw_text: cleaned }, { status: 502 });
   }
 
@@ -237,7 +244,7 @@ Return ONLY raw JSON. No markdown.`;
 
   // 9. Save to Firestore (Enriched Schema)
   try {
-    await addDoc(collection(db, "farmPlans"), {
+    const docData: any = {
       weather: { temperature, humidity, rain_probability: weather.rain_probability },
       crop_health: { growthStage, leafColor, pestPresence },
       market: marketData,
@@ -246,11 +253,15 @@ Return ONLY raw JSON. No markdown.`;
       farmPlan: parsed,
       alerts,
       createdAt: new Date(),
-    });
-    console.log("Autonomous plan saved to Firestore");
+    };
+    if (body.userId) {
+      docData.userId = body.userId;
+    }
+    const docRef = await addDoc(collection(db, "farmPlans"), docData);
+    console.log("Autonomous plan saved to Firestore with ID:", docRef.id);
+    return NextResponse.json({ success: true, plan: parsed, alerts, planId: docRef.id });
   } catch (firestoreErr: any) {
     console.error("Firestore persistence skipped:", firestoreErr.message);
+    return NextResponse.json({ success: true, plan: parsed, alerts, planId: null });
   }
-
-  return NextResponse.json({ success: true, plan: parsed, alerts });
 }

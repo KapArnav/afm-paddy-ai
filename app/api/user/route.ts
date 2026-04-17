@@ -6,7 +6,18 @@ import { db } from "../../../lib/firebase";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, location, cropType } = body;
+    const { 
+      userId, 
+      name, 
+      location, 
+      cropType, 
+      farmSize, 
+      irrigationType, 
+      growthStage, 
+      soilCondition, 
+      fertilizerUsage, 
+      pestHistory 
+    } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -19,12 +30,20 @@ export async function POST(req: NextRequest) {
     await setDoc(
       userRef,
       {
-        userId,
-        location: location ?? "Unknown",
+        uid: userId, // matching user schema requirement
+        name: name ?? "Unknown Farmer",
+        location: location ?? "Unknown Region",
         cropType: cropType ?? "Paddy",
+        farmSize: farmSize ?? "Unknown",
+        irrigationType: irrigationType ?? "Unknown",
+        growthStage: growthStage ?? "Unknown",
+        soilCondition: soilCondition ?? "Unknown",
+        fertilizerUsage: fertilizerUsage ?? "Unknown",
+        pestHistory: pestHistory ?? "Unknown",
+        createdAt: serverTimestamp(), // user requested createdAt
         updatedAt: serverTimestamp(),
       },
-      { merge: true } // Update without overwriting existing fields
+      { merge: true } // Update without overwriting conditionally if needed, but merge true means it merges fields.
     );
 
     return NextResponse.json({ success: true, message: "User profile saved successfully" });
