@@ -7,9 +7,10 @@ import { useRouter } from 'next/navigation';
 import { User, MapPin, Leaf, ShieldCheck, Mail, LogOut } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import { UserProfile } from '../types/farm';
 const ProfilePage = () => {
   const router = useRouter();
-  const [user, setUser] = useState<Record<string, any> | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
@@ -17,8 +18,12 @@ const ProfilePage = () => {
         router.push('/auth');
       } else {
         try {
-          // Re-fetch to ensure localStorage parity
-          const res = await fetch(`/api/user?userId=${authUser.uid}`);
+          if (!authUser.uid) return;
+          
+           // Re-fetch to ensure localStorage parity
+           const res = await fetch(`/api/user`, {
+             headers: { 'x-user-id': authUser.uid }
+           });
           if (res.ok) {
             const data = await res.json();
             if (data.success && data.user) {
@@ -56,9 +61,9 @@ const ProfilePage = () => {
           <User size={40} />
         </div>
         <div className="text-center">
-          <h3 className="text-2xl font-black">{auth.currentUser?.displayName || user?.name || 'Farmer Name'}</h3>
+          <h3 className="text-2xl font-black">{(auth.currentUser?.displayName || user?.name || 'Farmer Name') as string}</h3>
           <p className="text-xs font-bold uppercase tracking-widest opacity-60 flex items-center justify-center gap-1">
-            <MapPin size={12} /> {user?.location || 'Location Not Set'}
+            <MapPin size={12} /> {(user?.location || 'Location Not Set') as string}
           </p>
         </div>
       </Card>
@@ -71,7 +76,7 @@ const ProfilePage = () => {
               <Leaf size={18} className="text-secondary" />
               <span className="text-sm font-bold text-primary">Main Crop</span>
             </div>
-            <span className="text-sm font-black text-primary uppercase tracking-wider">{user?.cropType || 'Paddy'}</span>
+            <span className="text-sm font-black text-primary uppercase tracking-wider">{(user as { cropType?: string })?.cropType || 'Paddy'}</span>
           </div>
           <div className="flex items-center justify-between border-b border-secondary/5 pb-3">
             <div className="flex items-center gap-3">

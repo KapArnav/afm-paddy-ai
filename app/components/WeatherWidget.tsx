@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { CloudRain, Thermometer, Droplets } from 'lucide-react';
+import { CloudRain, Droplets } from 'lucide-react';
 import Card from './ui/Card';
 
 interface WeatherData {

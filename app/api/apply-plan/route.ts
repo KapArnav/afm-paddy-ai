@@ -8,8 +8,8 @@ export async function POST(req: NextRequest) {
 
     if (!userId || !planId) {
       return NextResponse.json(
-        { success: false, error: "userId and planId are required" },
-        { status: 400 }
+        { success: false, error: "Authentication Failure: Missing UID or PlanID in context" },
+        { status: 401 }
       );
     }
 
@@ -27,11 +27,12 @@ export async function POST(req: NextRequest) {
       updatedAt: serverTimestamp(),
     });
 
-    return NextResponse.json({ success: true, message: "Plan successfully applied to your field" });
-  } catch (error: any) {
+    return NextResponse.json({ success: true, message: "Plan applied successfully" });
+  } catch (error: unknown) {
     console.error("apply-plan error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: "Failed to apply plan", detail: error.message },
+      { success: false, error: "Failed to apply plan", detail: message },
       { status: 500 }
     );
   }

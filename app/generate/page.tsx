@@ -10,7 +10,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 const GeneratePage = () => {
   const router = useRouter();
-  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     growthStage: 'Tillering',
@@ -22,7 +21,6 @@ const GeneratePage = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) router.push('/auth');
-      else setAuthLoading(false);
     });
     return () => unsubscribe();
   }, [router]);
@@ -32,7 +30,10 @@ const GeneratePage = () => {
     try {
       const res = await fetch('/api/generate-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-id': auth.currentUser?.uid || ''
+        },
         body: JSON.stringify({
           formData: {
             growthStage: formData.growthStage,

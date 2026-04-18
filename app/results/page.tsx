@@ -18,10 +18,11 @@ import RiskBadge from '../components/ui/RiskBadge';
 import Timeline from '../components/Timeline';
 import Button from '../components/ui/Button';
 import { auth } from '@/lib/firebase';
+import { AnalysisResult, FarmPlan } from '../types/farm';
 
 const ResultsPage = () => {
   const router = useRouter();
-  const [data, setData] = useState<Record<string, any> | null>(null);
+  const [data, setData] = useState<AnalysisResult | null>(null);
   const [showReasoning, setShowReasoning] = useState(false);
   const [insights, setInsights] = useState({ marketPotential: 0, strategyGain: 0 });
   const [applying, setApplying] = useState(false);
@@ -60,9 +61,7 @@ const ResultsPage = () => {
   useEffect(() => {
     const latest = localStorage.getItem('afm_latest_result');
     if (latest) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setData(JSON.parse(latest) as Record<string, unknown>);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(JSON.parse(latest) as AnalysisResult);
       setInsights({
         marketPotential: Math.round(Math.random() * 5 + 5),
         strategyGain: Math.round(Math.random() * 8 + 2)
@@ -74,7 +73,7 @@ const ResultsPage = () => {
 
   if (!data) return null;
 
-  const plan = data?.plan as any;
+  const plan = data?.plan as FarmPlan;
 
   // Fallback for missing market strategy (Stability Audit)
   const marketStrategy = plan.market_strategy?.action 
@@ -85,14 +84,21 @@ const ResultsPage = () => {
     <div className="p-6 flex flex-col gap-6 bg-background min-h-screen pb-32">
       {/* Header */}
       <div className="flex items-center justify-between mt-4">
-        <button onClick={() => router.push('/')} className="w-10 h-10 rounded-xl bg-white card-shadow flex items-center justify-center text-primary">
+        <button 
+          onClick={() => router.push('/')} 
+          aria-label="Go back to dashboard"
+          className="w-10 h-10 rounded-xl bg-white card-shadow flex items-center justify-center text-primary"
+        >
           <ChevronLeft size={20} />
         </button>
         <div className="flex flex-col items-center">
           <h2 className="text-secondary font-bold text-[10px] uppercase tracking-[0.2em] leading-none mb-1">Generated Plan</h2>
           <h1 className="text-xl font-black text-primary text-center leading-tight">Strategic Yield<br/>Optimization</h1>
         </div>
-        <button className="w-10 h-10 rounded-xl bg-white card-shadow flex items-center justify-center text-primary">
+        <button 
+          aria-label="Share this plan"
+          className="w-10 h-10 rounded-xl bg-white card-shadow flex items-center justify-center text-primary"
+        >
           <Share2 size={18} />
         </button>
       </div>

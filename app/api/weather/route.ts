@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
       humidity: data.main?.humidity ?? 0,
       rain_probability: rain_probability,
     });
-  } catch (error) {
+  } catch (error: unknown) {
+    console.error("weather error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { success: false, error: "Weather intelligence offline" },
       { status: 500 }
     );
   }

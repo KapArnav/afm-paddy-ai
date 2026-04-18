@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
+interface GeminiResponse {
+  candidates?: {
+    content?: {
+      parts?: { text?: string }[];
+    };
+  }[];
+}
+
 export async function POST(req: NextRequest) {
   console.log("ANALYZE IMAGE API HIT");
 
-  // 1. Check API key
+  // 1. Check Auth Header (Mandatory Security)
+  const userId = req.headers.get("x-user-id");
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Authentication Failure: Unverified UID context" },
+      { status: 401 }
+    );
+  }
+
+  // 1.1 Check API key
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -29,6 +46,25 @@ export async function POST(req: NextRequest) {
       { error: "Missing required field: image (base64 string)" },
       { status: 400 }
     );
+  }
+
+  // 2.1 Validate image payload
+  if (image.length > 5 * 1024 * 1024) {
+    return NextResponse.json(
+      { error: "Image too large. Maximum size is 5MB." },
+      { status: 413 }
+    );
+  }
+
+  // Extract raw base64 and dynamic mime-type if it has a prefix
+  let base64Data = image;
+  let dynamicMimeType = "image/jpeg"; // Default
+
+  if (image.includes(",")) {
+    const parts = image.split(",");
+    base64Data = parts[1];
+    const match = parts[0].match(/data:(.*?);/);
+    if (match) dynamicMimeType = match[1];
   }
 
   // 3. Build Gemini request
@@ -63,8 +99,8 @@ Do not include markdown or explanations.`;
               { text: prompt },
               {
                 inlineData: {
-                  mimeType: "image/jpeg",
-                  data: image,
+                  mimeType: dynamicMimeType,
+                  data: base64Data,
                 },
               },
             ],
@@ -76,12 +112,12 @@ Do not include markdown or explanations.`;
         },
       }),
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown fetch error";
-    console.error("Gemini fetch error:", message);
+  } catch (error: unknown) {
+    console.error("analyze-image error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { error: "Failed to reach Gemini API", detail: message },
-      { status: 502 }
+      { success: false, error: "Failed to analyze crop image", detail: message },
+      { status: 500 }
     );
   }
 
@@ -96,7 +132,7 @@ Do not include markdown or explanations.`;
   }
 
   // 6. Parse Gemini response
-  let data: any;
+  let data: GeminiResponse;
   try {
     data = await geminiRes.json();
   } catch {
@@ -124,12 +160,13 @@ Do not include markdown or explanations.`;
   let parsed: { issues: string[]; confidence: number };
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    console.error("Failed to parse Gemini text as JSON:", cleaned);
-    return NextResponse.json(
-      { error: "Gemini response was not valid JSON", raw_text: cleaned },
-      { status: 502 }
-    );
+  } catch (err: unknown) {
+    console.error("AI Response Parsing Failure:", err, cleaned);
+    // Safe fallback instead of crashing
+    parsed = { 
+      issues: ["AI was unable to clearly identify specific issues in this image."], 
+      confidence: 0 
+    };
   }
 
   // 9. Return result

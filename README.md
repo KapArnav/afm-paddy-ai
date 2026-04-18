@@ -1,91 +1,50 @@
-# AFM Paddy AI 🌾 — Strategic Farm Intelligence
+# AFM Paddy AI: Autonomous Farm Manager 🌾🤖
 
-AFM Paddy AI is an elite, autonomous farm management platform designed for Malaysian paddy (rice) farmers. By synthesizing real-time data from weather, market, and visual agents with **Google Gemini 1.5 Flash**, it provides high-precision, actionable farming strategies that evolve with the environment.
+AFM Paddy AI is a production-ready, multi-agent AI framework designed specifically for paddy farmers in Malaysia. It utilizes the Gemini AI engine to synthesize environmental, visual, and market data into actionable farming strategies.
 
----
-
-## 🌟 Elite Features
-
-### 🧠 Multi-Agent AI Strategist
-- **Autonomous Synthesis**: Combines **Weather**, **Market**, and **Visual** agent data into a cohesive 30-day operational plan.
-- **Actionable Roadmaps**: Generates exactly **3 professional implementation steps** for every timeline task, providing a granular guide from seed to harvest.
-- **Deep Strategic Reasoning**: Provides the "Why" behind every action (e.g., explaining moisture management based on precise rainfall forecasts).
-
-### 📊 Real-Time Connectivity
-- **🌤️ Dynamic Weather Agent**: Injects live Kedah-region weather forecasts (temperature, rain, humidity) directly into AI planning logic.
-- **📉 Market Intelligence Agent**: Analyzes crop price trends and demand to recommend high-yield "Sell/Hold" strategies.
-- **🔬 Visual Guard (Vision API)**: Analyzes crop photos to detect nutrient deficiencies, pests, and leaf discoloration with AI precision.
-
-### ⚡ Professional Farm Dashboard
-- **Expandable Strategy Roadmap**: An interactive 30-day timeline where every task can be expanded to reveal implementation steps and reasoning.
-- **Intelligence Notification Center**: A dedicated alert panel for real-time farm warnings (e.g., rainfall stress, pest peaks, market fluctuations).
-- **Synchronized State**: The dashboard automatically hydrates from an active AI strategy, calculating "Today's Primary Task" dynamically based on elapsed time.
-
-### 🗂️ Farm Intelligence Archive (History)
-- **Deep Historical Recall**: Access every strategy ever generated. 
-- **Plan Detail Restoration**: Clicking any historical record restores the full Result View, allowing for detailed comparative analysis of past strategies.
-- **Data Integrity**: Powered by **Firebase Firestore**, ensuring lightning-fast persistence and secure cross-device synchronization.
-
----
+## 🚀 Core Features
+- **Parallel Agent Orchestration**: Synthesizes inputs from Weather, Market, and Visual agents simultaneously for optimal latency.
+- **AI Vision Analysis**: Identifies pests, diseases, and nutrient deficiencies from field photos.
+- **Dynamic 30-Day Planning**: Generates day-by-day action timelines tailored to crop growth stages.
+- **Market Intel**: Provides "Buy/Sell/Wait" strategies based on real-time market signals.
+- **Zero-Trust Security**: Implements strict UID verification across all API routes to ensure user data isolation.
 
 ## 🛠️ Tech Stack
+- **Frontend**: Next.js 14, Tailwind CSS, Lucide Icons.
+- **Backend**: Next.js API Routes (Serverless).
+- **AI**: Google Gemini Pro & Gemini Flash 2.5.
+- **Database**: Firebase Firestore (NoSQL).
+- **Auth**: Firebase Authentication.
 
-| Layer | Technology |
-|---|---|
-| **Framework** | [Next.js 15 (App Router)](https://nextjs.org/) |
-| **UI Library** | [React 19](https://react.dev/) |
-| **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) |
-| **Core AI** | [Google Gemini 1.5 Flash](https://ai.google.dev/) |
-| **Persistence** | [Firebase (Firestore & Auth)](https://firebase.google.com/) |
-| **Icons** | [Lucide React](https://lucide.dev/) |
+## 📦 Getting Started
 
----
-
-## 🚀 Getting Started
-
-### 1. Requirements
-- **Gemini API Key** (Google AI Studio)
-- **Firebase Project** (Firestore & Auth enabled)
-- **OpenWeather API Key**
-
-### 2. Environment Setup (`.env.local`)
+### 1. Environment Configuration
+Create a `.env.local` file with the following keys:
 ```env
-GEMINI_API_KEY=your_key
-WEATHER_API_KEY=your_key
-
-# Firebase Config
+GEMINI_API_KEY=your_key_here
+WEATHER_API_KEY=your_key_here
+# Firebase Config (Shared)
 NEXT_PUBLIC_FIREBASE_API_KEY=...
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
 ```
 
-### 3. Deployment
+### 2. Installation
 ```bash
 npm install
+```
+
+### 3. Launch Development Server
+```bash
 npm run dev
 ```
 
----
-
-## 🛡️ Audit & Certification
-This platform has undergone a comprehensive **System-Wide Audit (Lead Auditor Sweep)**.
-- **UX Stability**: Navigation flows, loading states, and auth-redirections are 100% verified.
-- **Feature Connectivity**: All historical records are active and restorable.
-- **Data Integrity**: Hardened Firestore/LocalStorage synchronization logic.
-
-*Detailed logs available in [AUDIT_LOG.md](./AUDIT_LOG.md).*
+## 🛡️ Production Hardening (Audit Certified)
+The current codebase has undergone a comprehensive system audit (see `AUDIT_LOG.md`) focusing on:
+1. **API Authentication**: Mandatory `x-user-id` header context.
+2. **Onboarding Integrity**: Enforced profile checks in the auth lifecycle.
+3. **AI Resilience**: Safe JSON parsing with robust fallbacks.
+4. **Performance**: Optimized parallel fetch orchestration.
 
 ---
-
-## 🌿 Project Structure
-- `/app/api`: Autonomous agents (Weather, Market, Visual, Strategy).
-- `/app/generate`: Multi-step strategic planning flow.
-- `/app/history`: Archive of farming intelligence.
-- `/components`: Premium UI components (Timeline, RiskBadge, MarketWidget).
-
----
-
-Developed for the future of Malaysian Agriculture. 🚜💨
+Built with ❤️ for the future of Malaysian Agriculture.

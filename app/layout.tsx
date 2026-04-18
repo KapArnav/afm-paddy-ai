@@ -19,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${outfit.variable} font-sans bg-background text-foreground`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${outfit.variable} font-sans bg-background text-foreground`} suppressHydrationWarning>
         {/* Mobile Container */}
         <div className="min-h-screen flex flex-col items-center">
           <main className="w-full max-w-[440px] flex-grow relative bg-background pb-24 min-h-screen">

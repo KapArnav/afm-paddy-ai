@@ -30,23 +30,34 @@ const AuthPage = () => {
     setError(null);
 
     try {
+      let authUser;
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        const userCred = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        authUser = userCred.user;
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-        await updateProfile(userCredential.user, {
+        const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        await updateProfile(userCred.user, {
           displayName: formData.name
         });
+        authUser = userCred.user;
       }
-      router.push('/');
-    } catch (err: any) {
-      console.error("Auth error:", err.code);
-      setError(
-        err.code === 'auth/user-not-found' ? 'User not found. Try signing up!' :
-        err.code === 'auth/wrong-password' ? 'Incorrect password.' :
-        err.code === 'auth/email-already-in-use' ? 'Email already registered.' :
-        'An error occurred. Please try again.'
-      );
+
+      // Check if user profile exists
+      const userRes = await fetch('/api/user', {
+        headers: { 'x-user-id': authUser.uid }
+      });
+      
+      const userData = await userRes.json();
+      if (userData.success && userData.user) {
+        localStorage.setItem('afm_user', JSON.stringify(userData.user));
+        router.push('/');
+      } else {
+        router.push('/onboarding');
+      }
+    } catch (err: unknown) {
+      console.error("Login failed:", err);
+      const message = err instanceof Error ? err.message : "Authentication failed";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -81,10 +92,11 @@ const AuthPage = () => {
         <form onSubmit={handleSubmit} className="flex flex-col gap-5 mt-2">
           {!isLogin && (
             <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Full Name</label>
+              <label htmlFor="full-name" className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Full Name</label>
               <div className="relative group">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40 group-focus-within:text-primary transition-colors" size={18} />
                 <input 
+                  id="full-name"
                   required
                   type="text" 
                   placeholder="e.g. Aman Gupta"
@@ -97,10 +109,11 @@ const AuthPage = () => {
           )}
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Email Address</label>
+            <label htmlFor="email" className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Email Address</label>
             <div className="relative group">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40 group-focus-within:text-primary transition-colors" size={18} />
               <input 
+                id="email"
                 required
                 type="email" 
                 placeholder="farm@manager.ai"
@@ -112,10 +125,11 @@ const AuthPage = () => {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Password</label>
+            <label htmlFor="password" className="text-[10px] font-black uppercase text-secondary/60 tracking-[0.2em] pl-1">Password</label>
             <div className="relative group">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40 group-focus-within:text-primary transition-colors" size={18} />
               <input 
+                id="password"
                 required
                 type="password" 
                 placeholder="••••••••"

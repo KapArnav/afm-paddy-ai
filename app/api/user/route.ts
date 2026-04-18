@@ -19,10 +19,11 @@ export async function POST(req: NextRequest) {
       pestHistory 
     } = body;
 
+    // Safety: Only accept UID from the body in POST context
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
+        { success: false, error: "Authentication Failure: Missing userId in context" },
+        { status: 401 }
       );
     }
 
@@ -47,10 +48,11 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true, message: "User profile saved successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("user POST error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: "Failed to save user profile", detail: error.message },
+      { success: false, error: "Failed to save user profile", detail: message },
       { status: 500 }
     );
   }
@@ -59,13 +61,13 @@ export async function POST(req: NextRequest) {
 // ── GET /api/user?userId=xxx - Fetch a user profile ──────────────────
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = req.nextUrl;
-    const userId = searchParams.get("userId");
+    // Safety: Do NOT trust userId from query parameters
+    const userId = req.headers.get("x-user-id");
 
-    if (!userId) {
+    if (!userId || userId === "null" || userId === "undefined") {
       return NextResponse.json(
-        { success: false, error: "userId query parameter is required" },
-        { status: 400 }
+        { success: false, error: "Authentication Failure: Unverified UID context" },
+        { status: 401 }
       );
     }
 
@@ -74,8 +76,7 @@ export async function GET(req: NextRequest) {
 
     if (!userSnap.exists()) {
       return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
+        { success: true, user: null, message: "User not found" }
       );
     }
 
@@ -86,10 +87,11 @@ export async function GET(req: NextRequest) {
         ...userSnap.data(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("user GET error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: "Failed to fetch user profile", detail: error.message },
+      { success: false, error: "Failed to fetch user profile", detail: message },
       { status: 500 }
     );
   }

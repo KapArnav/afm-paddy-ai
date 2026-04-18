@@ -12,17 +12,41 @@ import Timeline from './components/Timeline';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { X } from 'lucide-react';
+import { ActivePlan } from './types/farm';
 
 export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [showAppliedToast, setShowAppliedToast] = useState(false);
-  const [activePlan, setActivePlan] = useState<any>(null);
+  const [activePlan, setActivePlan] = useState<ActivePlan | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [todayTask, setTodayTask] = useState("Routine field inspection and boundary check.");
+
+  useEffect(() => {
+    if (activePlan?.farmPlan?.timeline && activePlan?.appliedAt) {
+      // @ts-expect-error - Firestore Timestamp cast
+      const appliedDate = activePlan.appliedAt.seconds 
+        // @ts-expect-error - Firestore Timestamp cast
+        ? new Date(activePlan.appliedAt.seconds * 1000) 
+        : new Date(activePlan.appliedAt as Date);
+      
+      const now = Date.now();
+      const diffDays = Math.floor((now - appliedDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      const task = 
+        activePlan.farmPlan.timeline.reduce((prev: { day: number, action: string } | null, curr: { day: number, action: string }) => {
+        if (curr.day <= diffDays && curr.day > (prev?.day || -1)) return curr;
+        return prev;
+      }, null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (task) setTodayTask(task.action);
+    }
+  }, [activePlan]);
 
   useEffect(() => {
     if (searchParams.get('applied') === 'true') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowAppliedToast(true);
       const timer = setTimeout(() => setShowAppliedToast(false), 5000);
       return () => clearTimeout(timer);
@@ -37,9 +61,19 @@ export default function Dashboard() {
         const savedUser = localStorage.getItem('afm_user');
         
         try {
+          // Guard: Only fetch if we have a valid UID
+          if (!authUser.uid) {
+            setLoading(false);
+            return;
+          }
+
           const [userRes, planRes] = await Promise.all([
-            !savedUser ? fetch(`/api/user?userId=${authUser.uid}`) : Promise.resolve(null),
-            fetch(`/api/active-plan?userId=${authUser.uid}`)
+            !savedUser ? fetch(`/api/user`, {
+              headers: { 'x-user-id': authUser.uid }
+            }) : Promise.resolve(null),
+            fetch(`/api/active-plan`, {
+              headers: { 'x-user-id': authUser.uid }
+            })
           ]);
 
           if (userRes && userRes.ok) {
@@ -63,6 +97,7 @@ export default function Dashboard() {
           setLoading(false);
         } catch (error) {
           console.error("Dashboard init error:", error);
+          router.push('/onboarding'); // Safe fallback if profile is unreachable
           setLoading(false);
         }
       }
@@ -82,24 +117,6 @@ export default function Dashboard() {
   const riskLevel = activePlan?.farmPlan?.farm_summary?.overall_risk || "Normal";
   const keyRecommendation = activePlan?.farmPlan?.farm_summary?.key_issue || "Maintain standard crop monitoring and moisture levels.";
   
-  // Intelligence Upgrade: Select task based on days elapsed since appliedAt
-  let todayTask = "Routine field inspection and boundary check.";
-  if (activePlan?.farmPlan?.timeline && activePlan?.appliedAt) {
-    const appliedDate = activePlan.appliedAt.seconds 
-      ? new Date(activePlan.appliedAt.seconds * 1000) 
-      : new Date(activePlan.appliedAt);
-    
-    const diffDays = Math.floor((Date.now() - appliedDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // Find the task for the current day or the closest previous day
-    const task = activePlan.farmPlan.timeline.reduce((prev: any, curr: any) => {
-      if (curr.day <= diffDays && curr.day > (prev?.day || -1)) return curr;
-      return prev;
-    }, null);
-    
-    if (task) todayTask = task.action;
-  }
-
   return (
     <div className="p-6 flex flex-col gap-6 animate-in fade-in duration-500">
       {showAppliedToast && (
@@ -120,11 +137,12 @@ export default function Dashboard() {
         </div>
         <button 
           onClick={() => setShowNotifications(!showNotifications)}
+          aria-label="Toggle notifications"
           className={`w-12 h-12 rounded-2xl transition-all duration-300 flex items-center justify-center relative
             ${showNotifications ? 'bg-primary text-white shadow-lg' : 'bg-white text-primary card-shadow'}`}
         >
           <Bell size={20} />
-          {activePlan?.alerts?.length > 0 && (
+          {(activePlan?.alerts?.length || 0) > 0 && (
             <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full border-2 border-white 
               ${showNotifications ? 'bg-accent' : 'bg-alert'}`} />
           )}

@@ -6,6 +6,7 @@ interface TimelineItem {
   reason: string;
   priority: string;
   category: string;
+  steps?: string[];
 }
 
 interface TimelineProps {
@@ -57,7 +58,7 @@ const Timeline: React.FC<TimelineProps> = ({ items }) => {
                   <div className="flex flex-col gap-2">
                     <span className="text-[8px] font-black uppercase text-primary/40 tracking-widest">Implementation Steps</span>
                     <div className="flex flex-col gap-2">
-                      {(item.steps || ["Assess field conditions", "Execute primary action", "Monitor results"]).map((step, i) => (
+                      {(item.steps || ["Assess field conditions", "Execute primary action", "Monitor results"]).map((step: string, i: number) => (
                         <div key={i} className="flex gap-2 items-center">
                           <div className="w-1 h-1 rounded-full bg-accent shrink-0" />
                           <p className="text-xs font-bold text-primary/80">{step}</p>

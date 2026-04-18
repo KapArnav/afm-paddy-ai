@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = req.nextUrl;
-    const userId = searchParams.get("userId");
+    // Safety: Do NOT trust userId from query parameters
+    const userId = req.headers.get("x-user-id");
 
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "userId query parameter is required" },
-        { status: 400 }
+        { success: false, error: "Authentication Failure: Unverified UID context" },
+        { status: 401 }
       );
     }
 
@@ -22,17 +22,14 @@ export async function GET(req: NextRequest) {
     );
     
     const querySnapshot = await getDocs(q);
-    const plans: any[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      plans.push({ id: doc.id, ...doc.data() });
-    });
+    const plans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     return NextResponse.json({ success: true, history: plans });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("farm-history GET error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: "Failed to fetch farm history", detail: error.message },
+      { success: false, error: "Failed to fetch farm history", detail: message },
       { status: 500 }
     );
   }

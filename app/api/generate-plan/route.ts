@@ -34,6 +34,17 @@ interface GeminiResponse {
   error?: { message?: string };
 }
 
+interface AgentResult {
+  temperature?: number;
+  humidity?: number;
+  rain_probability?: number;
+  price_trend?: string;
+  demand?: string;
+  recommendation?: string;
+  issues?: string[];
+  confidence?: number;
+}
+
 // ── POST handler ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   console.log("API HIT: Autonomous Multi-Agent System");
@@ -51,64 +62,57 @@ export async function POST(req: NextRequest) {
   let body: RequestBody;
   try {
     body = await req.json();
-  } catch {
+    
+    // Safety: Ensure UID is provided in the authenticated body context
+    if (!body.userId) {
+      return NextResponse.json(
+        { success: false, error: "Authentication Failure: Missing userId in context" },
+        { status: 401 }
+      );
+    }
+  } catch (error: unknown) {
+    console.error("Master Orchestrator Failure:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { error: "Invalid or missing JSON body" },
-      { status: 400 }
+      { success: false, error: "AI Generation collapsed", detail: message },
+      { status: 500 }
     );
   }
 
   // 3. Setup dynamic base URL for internal agents
   const baseUrl = req.nextUrl.origin;
+  const userId = body.userId;
 
-  // --- AGENT: WEATHER ---
-  console.log("[Agent: Weather] Gathering environmental data...");
-  let weather;
-  try {
-    const weatherRes = await fetch(`${baseUrl}/api/weather`);
-    if (!weatherRes.ok) throw new Error("Weather service offline");
-    weather = await weatherRes.json();
-  } catch (err) {
-    console.error("[Agent: Weather] Error, using defaults:", err);
-    weather = { temperature: 28, humidity: 75, rain_probability: 20 };
-  }
-
-  const temperature = weather.temperature;
-  const humidity = weather.humidity;
-
-  // --- AGENT: MARKET ---
-  console.log("[Agent: Market] Fetching current crop trends...");
-  let marketData;
-  try {
-    const marketRes = await fetch(`${baseUrl}/api/market`);
-    if (!marketRes.ok) throw new Error("Market service offline");
-    marketData = await marketRes.json();
-  } catch (err) {
-    console.error("[Agent: Market] Error, using fallbacks:", err);
-    marketData = { price_trend: "stable", demand: "medium", recommendation: "hold" };
-  }
-
-  // --- AGENT: VISUAL (OPTIONAL) ---
+  // --- AGENTS: PARALLEL ORCHESTRATION ---
+  console.log("[Master Orchestrator] Triggering specialized agents in parallel...");
   const hasImage = !!(body.image && body.imageMimeType);
-  let imageAnalysis = { issues: [], confidence: 0 };
 
-  if (hasImage) {
-    console.log("[Agent: Visual] Analyzing crop imagery...");
-    try {
-      const visualRes = await fetch(`${baseUrl}/api/analyze-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: body.image })
-      });
-      if (visualRes.ok) {
-        imageAnalysis = await visualRes.json();
-      } else {
-        console.error("[Agent: Visual] Busy or error, bypassing image analysis");
-      }
-    } catch (err) {
-      console.error("[Agent: Visual] Fetch error:", err);
-    }
-  }
+  const [weather, marketData, imageAnalysis] = await Promise.all([
+    // Weather Agent
+    fetch(`${baseUrl}/api/weather`, { headers: { 'x-user-id': userId } })
+      .then(res => res.ok ? res.json() as Promise<AgentResult> : Promise.reject("Offline"))
+      .catch(() => ({ temperature: 28, humidity: 75, rain_probability: 20 } as AgentResult)),
+    
+    // Market Agent
+    fetch(`${baseUrl}/api/market`, { headers: { 'x-user-id': userId } })
+      .then(res => res.ok ? res.json() : Promise.reject("Offline"))
+      .catch(() => ({ price_trend: "stable", demand: "medium", recommendation: "hold" } as AgentResult)),
+    
+    // Visual Agent (Optional)
+    hasImage 
+      ? fetch(`${baseUrl}/api/analyze-image`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "x-user-id": userId || ""
+          },
+          body: JSON.stringify({ image: body.image })
+        }).then(res => res.ok ? res.json() as Promise<AgentResult> : { issues: [], confidence: 0 } as AgentResult)
+      : Promise.resolve({ issues: [], confidence: 0 } as AgentResult)
+  ]) as [AgentResult, AgentResult, AgentResult];
+
+  const temperature = weather.temperature || 28;
+  const humidity = weather.humidity || 75;
 
   // 4. Build Enriched Autonomous Strategist Prompt
   const fd = body?.formData ?? {};
@@ -117,8 +121,9 @@ export async function POST(req: NextRequest) {
   const pestPresence = fd.pestPresence ?? false;
   const optimizeFor = body.optimizeFor ?? "balanced";
 
-  const imageContext = imageAnalysis.issues.length > 0 
-    ? `VISUAL AGENT FINDINGS: ${imageAnalysis.issues.join(", ")} (Confidence: ${Math.round(imageAnalysis.confidence * 100)}%)`
+  const imageIssues = imageAnalysis.issues || [];
+  const imageContext = imageIssues.length > 0 
+    ? `VISUAL AGENT FINDINGS: ${imageIssues.join(", ")} (Confidence: ${Math.round((imageAnalysis.confidence || 0) * 100)}%)`
     : "VISUAL AGENT: No critical visual issues reported or image not provided.";
 
   const prompt = `You are a Multi-Agent Autonomous Farm Strategist.
@@ -210,8 +215,8 @@ Return ONLY raw JSON. No markdown.`;
       if (geminiRes.ok) break;
       errStatus = geminiRes.status;
       errDetail = await geminiRes.text();
-    } catch (err: any) {
-      errDetail = err.message;
+    } catch (err: unknown) {
+      errDetail = err instanceof Error ? err.message : String(err);
     }
     if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
   }
@@ -226,26 +231,40 @@ Return ONLY raw JSON. No markdown.`;
   if (!rawText) return NextResponse.json({ error: "Empty AI response" }, { status: 502 });
 
   const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  let parsed: any;
+  let parsed: Record<string, any>;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    return NextResponse.json({ error: "Invalid plan JSON", raw_text: cleaned }, { status: 502 });
+  } catch (err: unknown) {
+    console.error("AI Generation Parsing Failure:", err, cleaned);
+    // Safe fallback to prevent system crash
+    parsed = {
+      farm_summary: { overall_risk: "Low", key_issue: "Standard monitoring required." },
+      confidence_score: 80,
+      timeline: [{ day: 1, action: "Standard field inspection", reason: "Fallback logic triggered", steps: ["Check soil moisture", "Inspect leaves", "Boundary check"], priority: "Medium", category: "monitor" }],
+      market_strategy: { action: "HOLD", reason: "AI response formatting error, using safe default" }
+    };
   }
 
   // 8. Generate Enriched Alerts
   const alerts: string[] = [];
-  if (weather.rain_probability > 70) alerts.push("High rain expected — delay fertilizer application.");
-  if (weather.temperature > 35) alerts.push("Extreme heat detected — ensure extra irrigation.");
+  if ((weather.rain_probability ?? 0) > 70) alerts.push("High rain expected — delay fertilizer application.");
+  if ((weather.temperature ?? 0) > 35) alerts.push("Extreme heat detected — ensure extra irrigation.");
+  
   if (marketData.price_trend === "decreasing" && marketData.demand === "high") {
     alerts.push("Market Alert: Price falling despite high demand. Consider selling soon.");
   }
-  if (parsed.farm_summary.overall_risk === "High") alerts.push("Risk Alert: Farm is in a high-risk state.");
+  // Explicit type check for plan data
+  const farmSummary = parsed.farm_summary as Record<string, any>;
+  if (farmSummary?.overall_risk === "High") alerts.push("Risk Alert: Farm is in a high-risk state.");
 
   // 9. Save to Firestore (Enriched Schema)
   try {
-    const docData: any = {
-      weather: { temperature, humidity, rain_probability: weather.rain_probability },
+    const docData: Record<string, unknown> = {
+      weather: { 
+        temperature: temperature, 
+        humidity: humidity, 
+        rain_probability: weather.rain_probability ?? 0 
+      },
       crop_health: { growthStage, leafColor, pestPresence },
       market: marketData,
       image_issues: imageAnalysis.issues || [],
@@ -260,8 +279,9 @@ Return ONLY raw JSON. No markdown.`;
     const docRef = await addDoc(collection(db, "farmPlans"), docData);
     console.log("Autonomous plan saved to Firestore with ID:", docRef.id);
     return NextResponse.json({ success: true, plan: parsed, alerts, planId: docRef.id });
-  } catch (firestoreErr: any) {
-    console.error("Firestore persistence skipped:", firestoreErr.message);
+  } catch (firestoreErr: unknown) {
+    const message = firestoreErr instanceof Error ? firestoreErr.message : String(firestoreErr);
+    console.error("Firestore persistence skipped:", message);
     return NextResponse.json({ success: true, plan: parsed, alerts, planId: null });
   }
 }

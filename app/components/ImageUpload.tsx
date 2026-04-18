@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
+import Image from "next/image";
 
 interface ImageUploadProps {
   onImageChange: (base64: string | null, mimeType: string | null) => void;
@@ -93,10 +94,13 @@ export default function ImageUpload({ onImageChange }: ImageUploadProps) {
         </div>
       ) : (
         <div style={styles.previewCard}>
-          <img
+          <Image
             src={preview}
             alt="Crop preview"
+            width={400}
+            height={240}
             style={styles.previewImg}
+            unoptimized
           />
           <div style={styles.previewInfo}>
             <span style={styles.fileName}>{fileName}</span>

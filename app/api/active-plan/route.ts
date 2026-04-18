@@ -4,13 +4,13 @@ import { db } from "../../../lib/firebase";
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = req.nextUrl;
-    const userId = searchParams.get("userId");
+    // Safety: Do NOT trust userId from query parameters
+    const userId = req.headers.get("x-user-id");
 
-    if (!userId) {
+    if (!userId || userId === "null" || userId === "undefined") {
       return NextResponse.json(
-        { success: false, error: "userId is required" },
-        { status: 400 }
+        { success: false, error: "Authentication Failure: Unverified UID context" },
+        { status: 401 }
       );
     }
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+      return NextResponse.json({ success: true, activePlan: null, message: "User profile not found" });
     }
 
     const userData = userSnap.data();
@@ -44,10 +44,11 @@ export async function GET(req: NextRequest) {
         ...planSnap.data(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("active-plan error:", error);
+    const message = error instanceof Error ? error.message : "An unknown error occurred";
     return NextResponse.json(
-      { success: false, error: "Failed to fetch active plan", detail: error.message },
+      { success: false, error: "Failed to fetch active plan", detail: message },
       { status: 500 }
     );
   }

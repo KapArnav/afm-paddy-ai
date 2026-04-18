@@ -78,7 +78,7 @@ const OnboardingPage = () => {
         localStorage.setItem('afm_user', JSON.stringify(formData));
         router.push('/');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Onboarding failed:", err);
     } finally {
       setLoading(false);
@@ -87,13 +87,12 @@ const OnboardingPage = () => {
 
   return (
     <div className="p-8 flex flex-col min-h-screen bg-background text-primary">
-      {/* ... previous content ... */}
       <div className="flex flex-col gap-2 mb-10 mt-12">
-        <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white mb-2">
+        <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white mb-2 shadow-xl shadow-primary/20">
           <Leaf size={28} />
         </div>
         <h1 className="text-3xl font-bold tracking-tight">Autonomous Farm Manager</h1>
-        <p className="text-secondary font-medium italic">Your AI-powered farm assistant. 🌾</p>
+        <p className="text-secondary font-medium italic text-sm">Your AI-powered farm assistant. 🌾</p>
       </div>
 
       <Card padding="large" className="flex flex-col gap-6 overflow-visible">
@@ -101,14 +100,15 @@ const OnboardingPage = () => {
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-black uppercase text-secondary tracking-widest">Full Name</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40" size={18} />
+            <label htmlFor="full-name" className="text-xs font-black uppercase text-secondary tracking-widest pl-1">Full Name</label>
+            <div className="relative group">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40 group-focus-within:text-primary transition-colors" size={18} />
               <input 
+                id="full-name"
                 required
                 type="text" 
                 placeholder="e.g. Aman Gupta"
-                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-secondary/5 border-none focus:ring-2 focus:ring-primary/20 text-primary font-bold placeholder:text-secondary/30"
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-secondary/5 border-none focus:ring-2 focus:ring-primary/20 text-primary font-bold placeholder:text-secondary/30 transition-all"
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
               />
@@ -116,14 +116,15 @@ const OnboardingPage = () => {
           </div>
 
           <div className="flex flex-col gap-2 relative">
-            <label className="text-xs font-black uppercase text-secondary tracking-widest">Location (Malaysia)</label>
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40" size={18} />
+            <label htmlFor="location" className="text-xs font-black uppercase text-secondary tracking-widest pl-1">Location (Malaysia)</label>
+            <div className="relative group">
+              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/40 group-focus-within:text-primary transition-colors" size={18} />
               <input 
+                id="location"
                 required
                 type="text" 
                 placeholder="e.g. Kedah, Sekinchan"
-                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-secondary/5 border-none focus:ring-2 focus:ring-primary/20 text-primary font-bold placeholder:text-secondary/30"
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-secondary/5 border-none focus:ring-2 focus:ring-primary/20 text-primary font-bold placeholder:text-secondary/30 transition-all"
                 value={formData.location}
                 onChange={(e) => handleLocationChange(e.target.value)}
                 onFocus={() => formData.location && setShowSuggestions(true)}

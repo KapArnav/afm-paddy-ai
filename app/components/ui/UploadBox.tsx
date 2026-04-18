@@ -19,9 +19,8 @@ const UploadBox: React.FC<UploadBoxProps> = ({ onImageSelect }) => {
       reader.onloadend = () => {
         const base64String = reader.result as string;
         setPreview(base64String);
-        // Strip the prefix for the API
-        const rawBase64 = base64String.split(',')[1];
-        onImageSelect(rawBase64);
+        // Safety: Pass the full Data URI (with prefix) to allow the backend to detect mime-type
+        onImageSelect(base64String);
       };
       reader.readAsDataURL(file);
     }
@@ -50,7 +49,13 @@ const UploadBox: React.FC<UploadBoxProps> = ({ onImageSelect }) => {
 
       {preview ? (
         <>
-          <img src={preview} alt="Crop preview" className="w-full h-full object-cover" />
+          <Image 
+            src={preview} 
+            alt="Crop preview" 
+            fill
+            className="object-cover"
+            unoptimized
+          />
           <div className="absolute inset-0 bg-black/20" />
           <button 
             onClick={clearImage}
