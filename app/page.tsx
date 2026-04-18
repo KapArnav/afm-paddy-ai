@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bell, ChevronRight, Info, CheckCircle2, Sparkles } from 'lucide-react';
 import Card from './components/ui/Card';
@@ -14,7 +14,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { X } from 'lucide-react';
 import { ActivePlan } from './types/farm';
 
-export default function Dashboard() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -260,5 +260,18 @@ export default function Dashboard() {
         </span>
       </Button>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 flex flex-col items-center justify-center min-h-screen gap-4">
+        <div className="w-10 h-10 border-4 border-primary/10 border-t-primary rounded-full animate-spin" />
+        <p className="text-[10px] font-black uppercase text-secondary/40 tracking-[0.2em]">Loading...</p>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
