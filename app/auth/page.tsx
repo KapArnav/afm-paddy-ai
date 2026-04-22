@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -30,6 +32,7 @@ const AuthPage = () => {
     setError(null);
 
     try {
+      if (!auth) throw new Error("Firebase Auth is not initialized.");
       let authUser;
       if (isLogin) {
         const userCred = await signInWithEmailAndPassword(auth, formData.email, formData.password);

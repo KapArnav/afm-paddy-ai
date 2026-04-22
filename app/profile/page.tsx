@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useState } from 'react';
 import { auth } from '@/lib/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
@@ -13,6 +15,7 @@ const ProfilePage = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!authUser) {
         router.push('/auth');
@@ -41,7 +44,7 @@ const ProfilePage = () => {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      if (auth) await signOut(auth);
       localStorage.clear();
       router.push('/auth');
     } catch (err) {
@@ -61,7 +64,7 @@ const ProfilePage = () => {
           <User size={40} />
         </div>
         <div className="text-center">
-          <h3 className="text-2xl font-black">{(auth.currentUser?.displayName || user?.name || 'Farmer Name') as string}</h3>
+          <h3 className="text-2xl font-black">{(auth?.currentUser?.displayName || user?.name || 'Farmer Name') as string}</h3>
           <p className="text-xs font-bold uppercase tracking-widest opacity-60 flex items-center justify-center gap-1">
             <MapPin size={12} /> {(user?.location || 'Location Not Set') as string}
           </p>
@@ -90,7 +93,7 @@ const ProfilePage = () => {
               <Mail size={18} className="text-secondary" />
               <span className="text-sm font-bold text-primary">Account Email</span>
             </div>
-            <span className="text-[10px] font-black text-primary opacity-60">{auth.currentUser?.email || 'N/A'}</span>
+            <span className="text-[10px] font-black text-primary opacity-60">{auth?.currentUser?.email || 'N/A'}</span>
           </div>
         </Card>
       </div>

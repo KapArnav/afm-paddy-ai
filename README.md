@@ -2,49 +2,50 @@
 
 AFM Paddy AI is a production-ready, multi-agent AI framework designed specifically for paddy farmers in Malaysia. It utilizes the Gemini AI engine to synthesize environmental, visual, and market data into actionable farming strategies.
 
-## 🚀 Core Features
-- **Parallel Agent Orchestration**: Synthesizes inputs from Weather, Market, and Visual agents simultaneously for optimal latency.
-- **AI Vision Analysis**: Identifies pests, diseases, and nutrient deficiencies from field photos.
-- **Dynamic 30-Day Planning**: Generates day-by-day action timelines tailored to crop growth stages.
-- **Market Intel**: Provides "Buy/Sell/Wait" strategies based on real-time market signals.
-- **Zero-Trust Security**: Implements strict UID verification across all API routes to ensure user data isolation.
+## ✨ Project Evolution & Implementation History
+
+Since inception, the project has evolved from a basic prototype to a hardened multi-agent production system. Key milestones include:
+
+1.  **Multi-Agent Orchestration**: Refactored the core engine from parallel processing (which hit quota limits) to a **Sequential Orchestration** model. Each agent (Weather, Market, Vision, Strategist) executes in a strict order with safety delays.
+2.  **Vertex AI Migration**: Transitioned from the standard Google AI SDK to the enterprise-grade **`@google-cloud/vertexai` SDK**, enabling Zero-Key authentication within Google Cloud Run.
+3.  **Production Hardening**: 
+    - Implemented a **Global Gemini Queue** to serialize AI calls across the entire instance.
+    - Added **Safe JSON Parsing** with raw-text fallbacks to prevent runtime crashes.
+    - Integrated **Vision Caching** to reduce redundant API calls and save tokens.
+4.  **Zero-Trust Security**: Removed all hardcoded API keys. The system now uses the **Cloud Run Service Account** for all GCP resource interactions.
+5.  **Infrastructure as Code**: Optimized deployment specifically for `asia-southeast1`.
 
 ## 🛠️ Tech Stack
-- **Frontend**: Next.js 14, Tailwind CSS, Lucide Icons.
+- **Frontend**: Next.js 14, Tailwind CSS, Vanilla CSS (Premium Finish).
 - **Backend**: Next.js API Routes (Serverless).
-- **AI**: Google Gemini Pro & Gemini Flash 2.5.
+- **AI**: Google Gemini 1.5 Flash (via Vertex AI SDK).
 - **Database**: Firebase Firestore (NoSQL).
 - **Auth**: Firebase Authentication.
+
+## ⚠️ Current Status & Known Issues
+
+### Vertex AI Permission Lock (Active)
+As of the latest deployment, the production environment is experiencing a **403 Permission Denied** error when accessing Vertex AI.
+- **Root Cause**: The Cloud Run Service Account (`738090758944-compute`) requires the `roles/aiplatform.user` IAM role, which needs to be finalized in the GCP Console.
+- **Resilience Strategy**: The app is currently configured with a **Fail-Soft Logic**. If the permission error persists, the Master Strategist will automatically fall back to a **Static Contingency Plan** to ensure the farm management dashboard remains usable for the farmer.
 
 ## 📦 Getting Started
 
 ### 1. Environment Configuration
-Create a `.env.local` file with the following keys:
+Create a `.env.local` file with the following:
 ```env
-GEMINI_API_KEY=your_key_here
-WEATHER_API_KEY=your_key_here
-# Firebase Config (Shared)
+# Shared Firebase Config
 NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=afm-paddy-ai-493808
 ```
 
-### 2. Installation
+### 2. Manual IAM Fix
+To resolve the current 403 error, run:
 ```bash
-npm install
+gcloud projects add-iam-policy-binding afm-paddy-ai-493808 \
+  --member="serviceAccount:738090758944-compute@developer.gserviceaccount.com" \
+  --role="roles/aiplatform.user"
 ```
-
-### 3. Launch Development Server
-```bash
-npm run dev
-```
-
-## 🛡️ Production Hardening (Audit Certified)
-The current codebase has undergone a comprehensive system audit (see `AUDIT_LOG.md`) focusing on:
-1. **API Authentication**: Mandatory `x-user-id` header context.
-2. **Onboarding Integrity**: Enforced profile checks in the auth lifecycle.
-3. **AI Resilience**: Safe JSON parsing with robust fallbacks.
-4. **Performance**: Optimized parallel fetch orchestration.
 
 ---
 Built with ❤️ for the future of Malaysian Agriculture.

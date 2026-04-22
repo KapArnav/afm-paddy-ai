@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -28,7 +30,7 @@ const ResultsPage = () => {
   const [applying, setApplying] = useState(false);
 
   const handleApply = async () => {
-    if (!auth.currentUser || !data?.planId) {
+    if (typeof window === "undefined" || !auth?.currentUser || !data?.planId) {
       alert("Application failed: Not authenticated or plan ID missing.");
       return;
     }
@@ -39,7 +41,7 @@ const ResultsPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: auth.currentUser.uid,
+          userId: auth.currentUser?.uid,
           planId: data.planId
         })
       });

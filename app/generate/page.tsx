@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layers, Brain, Sparkles, ChevronLeft } from 'lucide-react';
@@ -19,6 +21,7 @@ const GeneratePage = () => {
   });
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) router.push('/auth');
     });
@@ -28,6 +31,7 @@ const GeneratePage = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      if (typeof window === "undefined" || !auth?.currentUser) return;
       const res = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 
@@ -53,7 +57,8 @@ const GeneratePage = () => {
         router.push('/results');
       } else {
         const errData = await res.json();
-        alert(`Analysis failed: ${errData.error || 'Please check your API configuration'}`);
+        const detail = errData.detail ? `\n\nDetail: ${errData.detail}` : '';
+        alert(`Analysis failed: ${errData.error || 'Please check your API configuration'}${detail}`);
       }
     } catch (err) {
       console.error("Generation failed:", err);

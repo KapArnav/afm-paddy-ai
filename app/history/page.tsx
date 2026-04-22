@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useEffect, useState } from 'react';
 import { History as HistoryIcon, Clock } from 'lucide-react';
 import Card from '../components/ui/Card';
@@ -14,6 +16,7 @@ const HistoryPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push('/auth');

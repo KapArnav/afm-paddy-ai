@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { callVertexWithRetry } from "@/lib/gemini-client";
+import { checkVisionCache, setVisionCache } from "@/lib/vision-cache";
 
-interface GeminiResponse {
-  candidates?: {
-    content?: {
-      parts?: { text?: string }[];
-    };
-  }[];
-}
+const RequestBodySchema = z.object({
+  image: z.string().min(100), // Expecting a non-trivial base64 string
+});
 
 export async function POST(req: NextRequest) {
   console.log("ANALYZE IMAGE API HIT");
 
-  // 1. Check Auth Header (Mandatory Security)
   const userId = req.headers.get("x-user-id");
   if (!userId) {
     return NextResponse.json(
@@ -20,51 +18,47 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 1.1 Check API key
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "GEMINI_API_KEY is not configured in .env.local" },
-      { status: 500 }
-    );
-  }
-
   // 2. Parse request body
-  let body: { image?: string };
+  let body: any;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid or missing JSON body" },
-      { status: 400 }
-    );
+    const rawBody = await req.json();
+    const validation = RequestBodySchema.safeParse(rawBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid Input", details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+    body = validation.data;
+  } catch (error) {
+    return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
   }
 
   const { image } = body;
-  if (!image) {
-    return NextResponse.json(
-      { error: "Missing required field: image (base64 string)" },
-      { status: 400 }
-    );
-  }
-
-  // 2.1 Validate image payload
-  if (image.length > 5 * 1024 * 1024) {
-    return NextResponse.json(
-      { error: "Image too large. Maximum size is 5MB." },
-      { status: 413 }
-    );
-  }
-
-  // Extract raw base64 and dynamic mime-type if it has a prefix
   let base64Data = image;
-  let dynamicMimeType = "image/jpeg"; // Default
+  let dynamicMimeType = "image/jpeg";
 
   if (image.includes(",")) {
     const parts = image.split(",");
     base64Data = parts[1];
     const match = parts[0].match(/data:(.*?);/);
     if (match) dynamicMimeType = match[1];
+  }
+
+  // 2.2 CHECK CACHE FIRST (TPM Saver)
+  const cachedFindings = await checkVisionCache(userId, base64Data);
+  if (cachedFindings) {
+    try {
+      const parsedIssues = JSON.parse(cachedFindings);
+       return NextResponse.json({
+        success: true,
+        issues: parsedIssues,
+        confidence: 1.0,
+        cached: true
+      });
+    } catch {
+      console.warn("[Vision Cache] Corrupt cache entry, proceeding to API.");
+    }
   }
 
   // 3. Build Gemini request
@@ -76,104 +70,57 @@ Identify visible issues such as:
 - leaf discoloration
 
 Return ONLY valid JSON in this format:
-
 {
   "issues": ["...", "..."],
   "confidence": 0.0 to 1.0
 }
-
 Do not include markdown or explanations.`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // 2. Call Vertex AI via the new queued client (Task 2 & 6)
+    const visionPrompt = "Describe this paddy field's condition. Are there any visible pests, diseases, or nutrient issues? Be technical but concise.";
+    
+    // Task 6: use gemini-1.5-flash
+    const visionRes = await callVertexWithRetry(
+      ["gemini-1.5-flash"],
+      {
+        contents: [{ parts: [
+          { text: visionPrompt },
+          { inlineData: { mimeType: dynamicMimeType, data: base64Data } }
+        ]}]
+      }
+    );
 
-  // 4. Call Gemini API
-  let geminiRes: Response;
+    if (!visionRes.ok) {
+      return NextResponse.json(
+        { success: false, error: "Vision Analysis Unavailable", detail: visionRes.text },
+        { status: 429 }
+      );
+    }
+
+    const analysis = visionRes.text;
+  const rawText = analysis || "{}";
+  const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+
   try {
-    geminiRes = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: dynamicMimeType,
-                  data: base64Data,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 512,
-        },
-      }),
+    const parsed = JSON.parse(cleaned);
+    // Store in cache for future hits
+    await setVisionCache(userId, base64Data, JSON.stringify(parsed.issues || []));
+
+    return NextResponse.json({
+      success: true,
+      issues: parsed.issues ?? [],
+      confidence: parsed.confidence ?? 0,
+      model: visionRes.modelUsed
     });
-  } catch (error: unknown) {
-    console.error("analyze-image error:", error);
-    const message = error instanceof Error ? error.message : "An unknown error occurred";
-    return NextResponse.json(
-      { success: false, error: "Failed to analyze crop image", detail: message },
-      { status: 500 }
-    );
+  } catch (err) {
+    console.warn("[Vision API] Parsing failure, returning raw description fallback.");
+    // Fallback: If JSON parsing fails, treat the entire text as a single issue/description
+    const fallbackIssues = [cleaned.substring(0, 500)]; 
+    return NextResponse.json({
+      success: true,
+      issues: fallbackIssues,
+      confidence: 0.5,
+      isRawText: true
+    });
   }
-
-  // 5. Check HTTP status
-  if (!geminiRes.ok) {
-    const errBody = await geminiRes.text();
-    console.error("Gemini API error:", geminiRes.status, errBody);
-    return NextResponse.json(
-      { error: "Gemini API returned an error", status: geminiRes.status, detail: errBody },
-      { status: 502 }
-    );
-  }
-
-  // 6. Parse Gemini response
-  let data: GeminiResponse;
-  try {
-    data = await geminiRes.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to parse Gemini response" },
-      { status: 502 }
-    );
-  }
-
-  // 7. Extract text
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    console.error("No text in Gemini response:", JSON.stringify(data));
-    return NextResponse.json(
-      { error: "Gemini returned no text content", raw: data },
-      { status: 502 }
-    );
-  }
-
-  // 8. Clean and parse JSON
-  let cleaned = rawText.trim();
-  cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
-  cleaned = cleaned.replace(/\s*```$/i, "").trim();
-
-  let parsed: { issues: string[]; confidence: number };
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (err: unknown) {
-    console.error("AI Response Parsing Failure:", err, cleaned);
-    // Safe fallback instead of crashing
-    parsed = { 
-      issues: ["AI was unable to clearly identify specific issues in this image."], 
-      confidence: 0 
-    };
-  }
-
-  // 9. Return result
-  console.log("ANALYZE IMAGE SUCCESS");
-  return NextResponse.json({
-    success: true,
-    issues: parsed.issues ?? [],
-    confidence: parsed.confidence ?? 0,
-  });
 }

@@ -1,7 +1,40 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Security Headers
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://firebasestorage.googleapis.com; connect-src 'self' https://generativelanguage.googleapis.com https://api.openweathermap.org https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src 'self' https://afm-paddy-ai.firebaseapp.com; object-src 'none';"
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains"
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff"
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY"
+          },
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block"
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin"
+          }
+        ]
+      }
+    ];
+  }
 };
 
 export default nextConfig;

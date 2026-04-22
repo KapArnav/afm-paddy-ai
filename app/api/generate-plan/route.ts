@@ -1,287 +1,227 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collection, addDoc } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { db } from "@/lib/firebase";
+import { z } from "zod";
+import { callVertexWithRetry } from "@/lib/gemini-client";
+import { checkVisionCache, setVisionCache } from "@/lib/vision-cache";
 
+const RequestBodySchema = z.object({
+  formData: z.object({
+    growthStage: z.string().optional(),
+    pestPresence: z.boolean().optional(),
+  }).optional(),
+  image: z.string().nullable().optional(),
+  imageMimeType: z.string().nullable().optional(),
+  optimizeFor: z.enum(["balanced", "profit", "yield"]).default("balanced"),
+  userId: z.string().min(5),
+});
 
-// ── Types ───────────────────────────────────────────────────────────
-interface FormInput {
-  rainForecast?: string;
-  temperature?: number;
-  humidity?: number;
-  growthStage?: string;
-  leafColor?: string;
-  pestPresence?: boolean;
-  priceTrend?: string;
-  demand?: string;
-}
-
-interface RequestBody {
-  formData?: FormInput;
-  image?: string | null;       // base64
-  imageMimeType?: string | null;
-  optimizeFor?: string;        // "balanced" | "profit" | "yield"
-  userId?: string;             // Linking plan to user
-}
-
-interface GeminiCandidate {
-  content?: {
-    parts?: { text?: string }[];
-  };
-}
-
-interface GeminiResponse {
-  candidates?: GeminiCandidate[];
-  error?: { message?: string };
-}
-
-interface AgentResult {
-  temperature?: number;
-  humidity?: number;
-  rain_probability?: number;
-  price_trend?: string;
-  demand?: string;
-  recommendation?: string;
-  issues?: string[];
-  confidence?: number;
-}
-
-// ── POST handler ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  console.log("API HIT: Autonomous Multi-Agent System");
+  console.log("[Orchestrator] Starting Sequential Multi-Agent Analysis");
 
-  // 1. Check API key
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === "your_key_here") {
-    return NextResponse.json(
-      { error: "GEMINI_API_KEY is not configured in .env.local" },
-      { status: 500 }
-    );
-  }
-
-  // 2. Parse body safely
-  let body: RequestBody;
   try {
-    body = await req.json();
+    const rawBody = await req.json();
+    const body = RequestBodySchema.parse(rawBody);
+    const { userId, image, imageMimeType, optimizeFor, formData } = body;
+    const baseUrl = req.nextUrl.origin;
     
-    // Safety: Ensure UID is provided in the authenticated body context
-    if (!body.userId) {
-      return NextResponse.json(
-        { success: false, error: "Authentication Failure: Missing userId in context" },
-        { status: 401 }
-      );
-    }
-  } catch (error: unknown) {
-    console.error("Master Orchestrator Failure:", error);
-    const message = error instanceof Error ? error.message : "An unknown error occurred";
-    return NextResponse.json(
-      { success: false, error: "AI Generation collapsed", detail: message },
-      { status: 500 }
-    );
-  }
+    let geminiCallCount = 0;
+    const MAX_GEMINI_CALLS = 4;
+    const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-  // 3. Setup dynamic base URL for internal agents
-  const baseUrl = req.nextUrl.origin;
-  const userId = body.userId;
-
-  // --- AGENTS: PARALLEL ORCHESTRATION ---
-  console.log("[Master Orchestrator] Triggering specialized agents in parallel...");
-  const hasImage = !!(body.image && body.imageMimeType);
-
-  const [weather, marketData, imageAnalysis] = await Promise.all([
-    // Weather Agent
-    fetch(`${baseUrl}/api/weather`, { headers: { 'x-user-id': userId } })
-      .then(res => res.ok ? res.json() as Promise<AgentResult> : Promise.reject("Offline"))
-      .catch(() => ({ temperature: 28, humidity: 75, rain_probability: 20 } as AgentResult)),
-    
-    // Market Agent
-    fetch(`${baseUrl}/api/market`, { headers: { 'x-user-id': userId } })
-      .then(res => res.ok ? res.json() : Promise.reject("Offline"))
-      .catch(() => ({ price_trend: "stable", demand: "medium", recommendation: "hold" } as AgentResult)),
-    
-    // Visual Agent (Optional)
-    hasImage 
-      ? fetch(`${baseUrl}/api/analyze-image`, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "x-user-id": userId || ""
-          },
-          body: JSON.stringify({ image: body.image })
-        }).then(res => res.ok ? res.json() as Promise<AgentResult> : { issues: [], confidence: 0 } as AgentResult)
-      : Promise.resolve({ issues: [], confidence: 0 } as AgentResult)
-  ]) as [AgentResult, AgentResult, AgentResult];
-
-  const temperature = weather.temperature || 28;
-  const humidity = weather.humidity || 75;
-
-  // 4. Build Enriched Autonomous Strategist Prompt
-  const fd = body?.formData ?? {};
-  const growthStage = fd.growthStage ?? "Tillering";
-  const leafColor = fd.leafColor ?? "Normal Green";
-  const pestPresence = fd.pestPresence ?? false;
-  const optimizeFor = body.optimizeFor ?? "balanced";
-
-  const imageIssues = imageAnalysis.issues || [];
-  const imageContext = imageIssues.length > 0 
-    ? `VISUAL AGENT FINDINGS: ${imageIssues.join(", ")} (Confidence: ${Math.round((imageAnalysis.confidence || 0) * 100)}%)`
-    : "VISUAL AGENT: No critical visual issues reported or image not provided.";
-
-  const prompt = `You are a Multi-Agent Autonomous Farm Strategist.
-Your intelligence is synthesized from specialized vision, weather, and market agents.
-
-SYNTHESIZED INPUT DATA:
-
-=== ENVIRONMENTAL DATA (WEATHER AGENT) ===
-- Rain Probability: ${weather.rain_probability}%
-- Temperature: ${temperature}°C
-- Humidity: ${humidity}%
-
-=== CROP HEALTH DATA (USER + VISION AGENT) ===
-- Growth Stage: ${growthStage}
-- Leaf Color Indicator: ${leafColor}
-- Manual Pest Detection: ${pestPresence ? "Yes" : "No"}
-- ${imageContext}
-
-=== MARKET DATA (MARKET AGENT) ===
-- Price Trend: ${marketData.price_trend}
-- Demand Level: ${marketData.demand}
-- Market Agent Logic: ${marketData.recommendation}
-
-=== OBJECTIVE ===
-Optimize for ${optimizeFor.toUpperCase()}.
-
-INSTRUCTIONS:
-1. Synthesize all data points (Vision, Weather, Market). Detect non-obvious correlations (e.g., high rain probability + market sell signals -> prioritize immediate harvest vs fertilization).
-2. Generate a 30-day action timeline.
-3. Formulate a specific Market Strategy. You MUST provide a clear "action" (e.g. SELL, HOLD, WAIT, SCALE) and a compelling "reason" based on the synthesized agents.
-4. Detect hidden risks.
-
-Return ONLY valid JSON:
-{
-  "farm_summary": { "overall_risk": "Low/Medium/High", "key_issue": "string" },
-  "confidence_score": number (70-98),
-  "smart_insight": { "hidden_risk": "string", "recommendation": "string" },
-  "image_analysis": string[],
-  "timeline": [{ 
-    "day": number, 
-    "action": "string", 
-    "reason": "string", 
-    "steps": string[], // exactly 3 specific implementation steps
-    "priority": "High/Medium/Low", 
-    "category": "water/fertilizer/pest/harvest/monitor/soil" 
-  }],
-  "market_strategy": { "action": "string (MUST BE NON-EMPTY)", "reason": "string (MUST BE NON-EMPTY)" },
-  "ai_reasoning": string[] // exactly 5 concise bullets
-}
-
-Return ONLY raw JSON. No markdown.`;
-
-  // 5. Build request parts
-  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
-    { text: prompt },
-  ];
-
-  if (hasImage && body.image && body.imageMimeType) {
-    parts.push({
-      inlineData: {
-        mimeType: body.imageMimeType,
-        data: body.image,
-      },
-    });
-  }
-
-  // 6. Call Gemini API via fetch (v1beta, gemini-flash-latest)
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
-
-  const fetchOptions = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096,
-      },
-    }),
-  };
-
-  let geminiRes: Response | undefined;
-  let errStatus = 502;
-  let errDetail = "";
-
-  for (let attempt = 1; attempt <= 2; attempt++) {
+    // --- AGENT 1: Weather Agent (REST) ---
+    console.log("[Orchestrator] Agent 1: Fetching Weather Data");
+    let weather = { temperature: 28, humidity: 75, rain_probability: 20 };
     try {
-      geminiRes = await fetch(endpoint, fetchOptions);
-      if (geminiRes.ok) break;
-      errStatus = geminiRes.status;
-      errDetail = await geminiRes.text();
-    } catch (err: unknown) {
-      errDetail = err instanceof Error ? err.message : String(err);
+      const weatherRes = await fetch(`${baseUrl}/api/weather`, { 
+        headers: { 'x-user-id': userId },
+        cache: 'no-store' 
+      });
+      if (weatherRes.ok) weather = await weatherRes.json();
+    } catch (e) {
+      console.warn("[Orchestrator] Weather Agent failed, using fail-soft defaults.");
     }
-    if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
-  }
 
-  if (!geminiRes || !geminiRes.ok) {
-    return NextResponse.json({ error: "Gemini API failure", status: errStatus, detail: errDetail }, { status: 502 });
-  }
+    await delay(500); // Standard spacing
 
-  // 7. Parse & Clean JSON
-  const resultData: GeminiResponse = await geminiRes.json();
-  const rawText = resultData?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) return NextResponse.json({ error: "Empty AI response" }, { status: 502 });
-
-  const cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  let parsed: Record<string, any>;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (err: unknown) {
-    console.error("AI Generation Parsing Failure:", err, cleaned);
-    // Safe fallback to prevent system crash
-    parsed = {
-      farm_summary: { overall_risk: "Low", key_issue: "Standard monitoring required." },
-      confidence_score: 80,
-      timeline: [{ day: 1, action: "Standard field inspection", reason: "Fallback logic triggered", steps: ["Check soil moisture", "Inspect leaves", "Boundary check"], priority: "Medium", category: "monitor" }],
-      market_strategy: { action: "HOLD", reason: "AI response formatting error, using safe default" }
-    };
-  }
-
-  // 8. Generate Enriched Alerts
-  const alerts: string[] = [];
-  if ((weather.rain_probability ?? 0) > 70) alerts.push("High rain expected — delay fertilizer application.");
-  if ((weather.temperature ?? 0) > 35) alerts.push("Extreme heat detected — ensure extra irrigation.");
-  
-  if (marketData.price_trend === "decreasing" && marketData.demand === "high") {
-    alerts.push("Market Alert: Price falling despite high demand. Consider selling soon.");
-  }
-  // Explicit type check for plan data
-  const farmSummary = parsed.farm_summary as Record<string, any>;
-  if (farmSummary?.overall_risk === "High") alerts.push("Risk Alert: Farm is in a high-risk state.");
-
-  // 9. Save to Firestore (Enriched Schema)
-  try {
-    const docData: Record<string, unknown> = {
-      weather: { 
-        temperature: temperature, 
-        humidity: humidity, 
-        rain_probability: weather.rain_probability ?? 0 
-      },
-      crop_health: { growthStage, leafColor, pestPresence },
-      market: marketData,
-      image_issues: imageAnalysis.issues || [],
-      imageUrl: hasImage ? "Image provided (Base64)" : null,
-      farmPlan: parsed,
-      alerts,
-      createdAt: new Date(),
-    };
-    if (body.userId) {
-      docData.userId = body.userId;
+    // --- AGENT 2: Market Agent (REST) ---
+    console.log("[Orchestrator] Agent 2: Fetching Market Trends");
+    let marketData = { price_trend: "stable", demand: "medium", recommendation: "hold" };
+    try {
+      const marketRes = await fetch(`${baseUrl}/api/market`, { 
+        headers: { 'x-user-id': userId },
+        cache: 'no-store'
+      });
+      if (marketRes.ok) marketData = await marketRes.json();
+    } catch (e) {
+      console.warn("[Orchestrator] Market Agent failed, using fail-soft defaults.");
     }
-    const docRef = await addDoc(collection(db, "farmPlans"), docData);
-    console.log("Autonomous plan saved to Firestore with ID:", docRef.id);
-    return NextResponse.json({ success: true, plan: parsed, alerts, planId: docRef.id });
-  } catch (firestoreErr: unknown) {
-    const message = firestoreErr instanceof Error ? firestoreErr.message : String(firestoreErr);
-    console.error("Firestore persistence skipped:", message);
-    return NextResponse.json({ success: true, plan: parsed, alerts, planId: null });
+
+    await delay(500);
+
+    // --- AGENT 3: Vision Agent (Gemini) ---
+    let visionFindings = "Vision analysis skipped or unavailable.";
+    let base64Data = image || "";
+    if (base64Data.includes(",")) base64Data = base64Data.split(",")[1];
+
+    if (base64Data && geminiCallCount < MAX_GEMINI_CALLS) {
+      console.log("[Orchestrator] Agent 3: Vision Analysis Start");
+      
+      // Check Cache first
+      const cached = await checkVisionCache(userId, base64Data);
+      if (cached) {
+        visionFindings = `Vision Analysis (Cached): ${cached}`;
+      } else {
+        geminiCallCount++;
+        const visionPrompt = "Identify visible crop issues: nutrient deficiencies, pest damage, disease, or discoloration. Return only JSON: { issues: string[] }";
+        
+        const visionRes = await callVertexWithRetry(
+          ["gemini-1.5-flash"],
+          {
+            contents: [{ parts: [
+              { text: visionPrompt },
+              { inlineData: { mimeType: imageMimeType || "image/jpeg", data: base64Data } }
+            ]}]
+          }
+        );
+
+        if (visionRes.ok) {
+          const cleaned = visionRes.text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+          await setVisionCache(userId, base64Data, cleaned);
+          visionFindings = `Vision Analysis: ${cleaned}`;
+        } else {
+          console.warn("[Orchestrator] Vision Agent failed-soft.");
+        }
+      }
+    }
+
+    await delay(500);
+
+    // --- AGENT 4: Master Strategist (Gemini) ---
+    const DEFAULT_BUDGET = 5000; // RM
+    let planData: any = null;
+    let strategistModel = "gemini-1.5-flash-001";
+
+    const masterPrompt = `
+      You are the Master Paddy Farming Strategist.
+      Generate the MOST OPTIMIZED plan within the given context.
+      If situational constraints (like rain or pests) make a low-cost plan impossible, 
+      generate the closest possible plan and explain the adjustments in the warning field.
+      
+      SITUATIONAL CONTEXT:
+      - Weather: ${JSON.stringify(weather)}
+      - Market: ${JSON.stringify(marketData)}
+      - Vision Report: ${visionFindings}
+      
+      FARM PARAMETERS:
+      - Growth Stage: ${formData?.growthStage || "Tillering"}
+      - Logic Mode: ${optimizeFor}
+      - Manual Pest Flag: ${formData?.pestPresence ? "Yes" : "No"}
+      
+      REQUIREMENT: Return ONLY a valid JSON object.
+      {
+        "farm_summary": { "overall_risk": "Low/Medium/High", "key_issue": "string" },
+        "total_estimated_cost": number, 
+        "warning": "string or null",
+        "confidence_score": number,
+        "smart_insight": { "hidden_risk": "string", "recommendation": "string" },
+        "timeline": [{ "day": number, "action": "string", "reason": "string", "priority": "High/Medium/Low" }],
+        "market_strategy": { "action": "string", "reason": "string" },
+        "ai_reasoning": string[]
+      }
+    `;
+
+    if (geminiCallCount < MAX_GEMINI_CALLS) {
+      console.log("[Orchestrator] Agent 4: Master Strategist Start");
+      geminiCallCount++;
+
+      try {
+        const strategistRes = await callVertexWithRetry(
+          [strategistModel],
+          { contents: [{ parts: [{ text: masterPrompt }] }] }
+        );
+
+        if (strategistRes.ok) {
+          const rawText = strategistRes.text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+          try {
+            planData = JSON.parse(rawText);
+          } catch (e) {
+            console.warn("[Orchestrator] Invalid JSON from Gemini, using raw text fallback");
+            planData = {
+              farm_summary: { overall_risk: "Medium", key_issue: "Parsing Error" },
+              total_estimated_cost: 0,
+              warning: "Plan generated but structure was non-standard. Displaying raw output.",
+              smart_insight: { hidden_risk: "Unknown", recommendation: rawText },
+              timeline: [],
+              market_strategy: { action: "Hold", reason: "AI output parsing failed" },
+              ai_reasoning: ["Raw output fallback used"]
+            };
+          }
+        }
+      } catch (e) {
+        console.warn("[Orchestrator] Master Strategist API failure, moving to fallback.");
+      }
+    }
+
+    // --- FALLBACK: If everything failed, use static contingency plan ---
+    if (!planData) {
+      console.warn("[Orchestrator] Using static Fallback Strategy (API Failure)");
+      planData = {
+        farm_summary: { overall_risk: "Medium", key_issue: "Offline Mode" },
+        total_estimated_cost: 0,
+        warning: "Advanced optimization unavailable, using generic fallback strategy.",
+        confidence_score: 50,
+        smart_insight: { 
+          hidden_risk: "Limited real-time data", 
+          recommendation: "Maintain standard irrigation and check for pests manually." 
+        },
+        timeline: [
+          { day: 1, action: "Manual Inspection", reason: "AI Strategist unreachable", priority: "High" }
+        ],
+        market_strategy: { action: "Buffer", reason: "Network issue" },
+        ai_reasoning: ["System fallback triggered"]
+      };
+    }
+
+    // Budget check logic (Guideline only)
+    if (planData.total_estimated_cost > DEFAULT_BUDGET && !planData.warning) {
+      planData.warning = "Estimated cost exceeds standard budget guidelines. Consider scaling or reviewing inputs.";
+    }
+
+    // Alerts logic
+    const alerts: string[] = [];
+    if (weather.rain_probability > 70) alerts.push("Heavy rain expected — adjust water management.");
+    if (planData.farm_summary?.overall_risk === "High") alerts.push("High-risk scenario detected.");
+
+    // Save to Firestore
+    try {
+      const docRef = await addDoc(collection(db, "farmPlans"), {
+        userId,
+        plan: planData,
+        weather,
+        market: marketData,
+        vision: visionFindings,
+        alerts,
+        createdAt: new Date(),
+        callBudget: geminiCallCount
+      });
+
+      return NextResponse.json({ 
+        success: true, 
+        plan: planData, 
+        alerts, 
+        planId: docRef.id,
+        contextScore: (geminiCallCount/MAX_GEMINI_CALLS) * 100
+      });
+    } catch (e) {
+      return NextResponse.json({ success: true, plan: planData, alerts });
+    }
+
+  } catch (error: any) {
+    console.error("[Orchestrator] Fatal Error:", error.message);
+    return NextResponse.json(
+      { success: false, error: error.message || "Pipeline collapse" },
+      { status: 500 }
+    );
   }
 }

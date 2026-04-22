@@ -1,11 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collection, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
+import { z } from "zod";
+
+const UserSchema = z.object({
+  userId: z.string().min(5),
+  name: z.string().min(2).max(100),
+  location: z.string().min(2).max(100),
+  cropType: z.string().max(50),
+  farmSize: z.string().max(50),
+  irrigationType: z.string().max(50),
+  growthStage: z.string().max(50).optional(),
+  soilCondition: z.string().max(50),
+  fertilizerUsage: z.string().max(50),
+  pestHistory: z.string().max(200)
+});
 
 // ── POST /api/user - Save or update user profile ─────────────────────
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    // Validate input payload
+    const validation = UserSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: "Invalid Input", details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+
     const { 
       userId, 
       name, 
@@ -13,11 +36,11 @@ export async function POST(req: NextRequest) {
       cropType, 
       farmSize, 
       irrigationType, 
-      growthStage, 
+      growthStage,
       soilCondition, 
       fertilizerUsage, 
       pestHistory 
-    } = body;
+    } = validation.data;
 
     // Safety: Only accept UID from the body in POST context
     if (!userId) {

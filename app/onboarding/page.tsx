@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Leaf, MapPin, User, ChevronRight } from 'lucide-react';
@@ -28,10 +30,12 @@ const OnboardingPage = () => {
     pestHistory: 'None'
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) router.push('/auth');
       else if (user.displayName && !formData.name) {
@@ -59,17 +63,18 @@ const OnboardingPage = () => {
     setShowSuggestions(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser) return;
+    if (typeof window === "undefined" || !auth?.currentUser) return;
     setLoading(true);
+    setError(null);
 
     try {
       const res = await fetch('/api/user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: auth.currentUser.uid,
+          userId: auth.currentUser?.uid,
           ...formData
         })
       });
@@ -77,9 +82,13 @@ const OnboardingPage = () => {
       if (res.ok) {
         localStorage.setItem('afm_user', JSON.stringify(formData));
         router.push('/');
+      } else {
+        const errData = await res.json();
+        setError(errData.error || "Failed to save profile. Please try again.");
       }
     } catch (err: unknown) {
       console.error("Onboarding failed:", err);
+      setError("Connection error. Please check your internet.");
     } finally {
       setLoading(false);
     }
@@ -99,6 +108,11 @@ const OnboardingPage = () => {
         <h2 className="text-xl font-bold uppercase tracking-widest text-secondary/40">Set up your field</h2>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          {error && (
+            <div className="p-4 bg-alert/5 border border-alert/20 rounded-2xl text-alert flex items-start gap-3">
+              <p className="text-xs font-bold">{error}</p>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <label htmlFor="full-name" className="text-xs font-black uppercase text-secondary tracking-widest pl-1">Full Name</label>
             <div className="relative group">

@@ -1,0 +1,16 @@
+# .gcloudignore
+# Standard ignores
+.git/
+.gitignore
+node_modules/
+.next/
+bin/
+obj/
+
+# Environment files
+.env.local
+.env.development
+.env.test
+
+# 👇 EXPLICITLY INCLUDE env.production (even if in .gitignore)
+!env.production

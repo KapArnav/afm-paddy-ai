@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bell, ChevronRight, Info, CheckCircle2, Sparkles } from 'lucide-react';
@@ -54,6 +56,7 @@ function DashboardContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!authUser) {
         router.push('/auth');
