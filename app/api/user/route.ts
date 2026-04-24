@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { firestoreServer } from "../../../lib/firestore-server";
+import { FieldValue } from "@google-cloud/firestore";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -50,9 +50,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userRef = doc(collection(db, "users"), userId);
-    await setDoc(
-      userRef,
+    const userRef = firestoreServer.collection("users").doc(userId);
+    await userRef.set(
       {
         uid: userId, // matching user schema requirement
         name: name ?? "Unknown Farmer",
@@ -64,8 +63,8 @@ export async function POST(req: NextRequest) {
         soilCondition: soilCondition ?? "Unknown",
         fertilizerUsage: fertilizerUsage ?? "Unknown",
         pestHistory: pestHistory ?? "Unknown",
-        createdAt: serverTimestamp(), // user requested createdAt
-        updatedAt: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(), // user requested createdAt
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true } // Update without overwriting conditionally if needed, but merge true means it merges fields.
     );
@@ -94,10 +93,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const userRef = doc(collection(db, "users"), userId);
-    const userSnap = await getDoc(userRef);
+    const userRef = firestoreServer.collection("users").doc(userId);
+    const userSnap = await userRef.get();
 
-    if (!userSnap.exists()) {
+    if (!userSnap.exists) {
       return NextResponse.json(
         { success: true, user: null, message: "User not found" }
       );

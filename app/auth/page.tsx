@@ -9,7 +9,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { Mail, Lock, User, Leaf, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -46,13 +47,13 @@ const AuthPage = () => {
       }
 
       // Check if user profile exists
-      const userRes = await fetch('/api/user', {
-        headers: { 'x-user-id': authUser.uid }
-      });
-      
-      const userData = await userRes.json();
-      if (userData.success && userData.user) {
-        localStorage.setItem('afm_user', JSON.stringify(userData.user));
+      const userSnap = await getDoc(doc(db, 'users', authUser.uid));
+      if (userSnap.exists()) {
+        const userData = {
+          id: userSnap.id,
+          ...userSnap.data(),
+        };
+        localStorage.setItem('afm_user', JSON.stringify(userData));
         router.push('/');
       } else {
         router.push('/onboarding');

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { firestoreServer } from "../../../lib/firestore-server";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,14 +13,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const plansRef = collection(db, "farmPlans");
-    // Order by createdAt descending
-    const q = query(
-      plansRef, 
-      where("userId", "==", userId)
-    );
-    
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await firestoreServer
+      .collection("farmPlans")
+      .where("userId", "==", userId)
+      .get();
     const plans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     return NextResponse.json({ success: true, history: plans });

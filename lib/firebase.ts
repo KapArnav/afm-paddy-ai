@@ -4,13 +4,15 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "demo",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "demo",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "demo",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "demo",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "demo",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "demo",
+  apiKey: "AIzaSyCphllpl5vaD8u2d2eTjyLNQarP9pd848I",
+  authDomain: "afm-ai-95d0d.firebaseapp.com",
+  projectId: "afm-ai-95d0d",
+  storageBucket: "afm-ai-95d0d.firebasestorage.app",
+  messagingSenderId: "366051982224",
+  appId: "1:366051982224:web:4a3c70c9d00aef733fd115",
+  measurementId: "G-GK14MLY2GJ"
 };
+
 
 // Initialize Firebase for both browser and server
 // During build, this will use the "demo" fallbacks but shouldn't crash

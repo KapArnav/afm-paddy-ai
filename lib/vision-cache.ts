@@ -3,8 +3,8 @@
  * Firestore-backed caching for vision analysis results to save on Gemini TPM quota.
  * Uses existing server-side Firebase initialization.
  */
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { db } from "./firebase";
+import { firestoreServer } from "./firestore-server";
+import { FieldValue, Timestamp } from "@google-cloud/firestore";
 
 export interface VisionResult {
   findings: string;
@@ -28,11 +28,11 @@ export function getVisionCacheKey(userId: string, imageBase64: string): string {
 export async function checkVisionCache(userId: string, imageBase64: string): Promise<string | null> {
   try {
     const cacheKey = getVisionCacheKey(userId, imageBase64);
-    const docRef = doc(db, "visionCache", cacheKey);
-    const docSnap = await getDoc(docRef);
+    const docSnap = await firestoreServer.collection("visionCache").doc(cacheKey).get();
 
-    if (docSnap.exists()) {
+    if (docSnap.exists) {
       const data = docSnap.data();
+      if (!data) return null;
       const ts = data.timestamp as Timestamp;
       
       if (ts) {
@@ -60,12 +60,10 @@ export async function checkVisionCache(userId: string, imageBase64: string): Pro
 export async function setVisionCache(userId: string, imageBase64: string, findings: string): Promise<void> {
   try {
     const cacheKey = getVisionCacheKey(userId, imageBase64);
-    const docRef = doc(db, "visionCache", cacheKey);
-    
-    await setDoc(docRef, {
+    await firestoreServer.collection("visionCache").doc(cacheKey).set({
       userId,
       findings,
-      timestamp: serverTimestamp()
+      timestamp: FieldValue.serverTimestamp()
     });
     
     console.log(`[Vision Cache] SET entry for key: ${cacheKey}`);

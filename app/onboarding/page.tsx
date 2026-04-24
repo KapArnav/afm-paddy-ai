@@ -7,8 +7,9 @@ import { useRouter } from 'next/navigation';
 import { Leaf, MapPin, User, ChevronRight } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 const MALAYSIA_LOCATIONS = [
   'Kedah (Kota Setar)', 'Kedah (Kubang Pasu)', 'Kedah (Yan)', 'Perlis', 
@@ -70,25 +71,34 @@ const OnboardingPage = () => {
     setError(null);
 
     try {
-      const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: auth.currentUser?.uid,
-          ...formData
-        })
+      const userId = auth.currentUser.uid;
+      const profile = {
+        uid: userId,
+        name: formData.name,
+        location: formData.location,
+        cropType: formData.cropType,
+        farmSize: formData.farmSize || 'Unknown',
+        irrigationType: formData.irrigationType,
+        growthStage: 'Unknown',
+        soilCondition: formData.soilCondition,
+        fertilizerUsage: formData.fertilizerUsage,
+        pestHistory: formData.pestHistory,
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'users', userId), {
+        ...profile,
+        createdAt: serverTimestamp(),
+      }, {
+        merge: true,
       });
 
-      if (res.ok) {
-        localStorage.setItem('afm_user', JSON.stringify(formData));
-        router.push('/');
-      } else {
-        const errData = await res.json();
-        setError(errData.error || "Failed to save profile. Please try again.");
-      }
+      localStorage.setItem('afm_user', JSON.stringify({ id: userId, ...profile }));
+      router.push('/');
     } catch (err: unknown) {
       console.error("Onboarding failed:", err);
-      setError("Connection error. Please check your internet.");
+      const message = err instanceof Error ? err.message : "Failed to save profile. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
