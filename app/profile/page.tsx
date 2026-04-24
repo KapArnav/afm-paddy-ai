@@ -3,16 +3,20 @@
 export const dynamic = "force-dynamic";
 
 import React, { useEffect, useState } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
 import { User, MapPin, Leaf, ShieldCheck, Mail, LogOut } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { UserProfile } from '../types/farm';
+
+type StoredUserProfile = UserProfile & { id?: string };
+
 const ProfilePage = () => {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<StoredUserProfile | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -23,16 +27,15 @@ const ProfilePage = () => {
         try {
           if (!authUser.uid) return;
           
-           // Re-fetch to ensure localStorage parity
-           const res = await fetch(`/api/user`, {
-             headers: { 'x-user-id': authUser.uid }
-           });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.user) {
-              setUser(data.user);
-              localStorage.setItem('afm_user', JSON.stringify(data.user));
-            }
+          const userSnap = await getDoc(doc(db, 'users', authUser.uid));
+          if (userSnap.exists()) {
+            const userData = {
+              uid: authUser.uid,
+              id: userSnap.id,
+              ...userSnap.data(),
+            } as StoredUserProfile;
+            setUser(userData);
+            localStorage.setItem('afm_user', JSON.stringify(userData));
           }
         } catch (err) {
           console.error("Profile re-fetch error:", err);

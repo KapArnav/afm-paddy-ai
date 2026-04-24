@@ -68,9 +68,10 @@ const HistoryPage = () => {
                  key={record.id} 
                  className="flex flex-col gap-3 border-l-4 border-secondary opacity-80 hover:opacity-100 transition-all cursor-pointer hover:translate-x-1"
                  onClick={() => {
+                   const storedPlan = (record as ActivePlan & { plan?: ActivePlan["farmPlan"] }).farmPlan || (record as ActivePlan & { plan?: ActivePlan["farmPlan"] }).plan;
                    localStorage.setItem('afm_latest_result', JSON.stringify({
                      success: true,
-                     plan: record.farmPlan,
+                     plan: storedPlan,
                      alerts: record.alerts,
                      planId: record.id
                    }));
@@ -85,8 +86,8 @@ const HistoryPage = () => {
                      {new Date((record.createdAt?.seconds || 0) * 1000).toLocaleDateString()}
                    </div>
                  </div>
-                 <h4 className="font-bold text-primary">{record.farmPlan?.market_strategy?.action || "Generated Strategy"}</h4>
-                 <p className="text-xs text-secondary/60 line-clamp-2">{record.farmPlan?.farm_summary?.key_issue}</p>
+                 <h4 className="font-bold text-primary">{(record.farmPlan || (record as ActivePlan & { plan?: ActivePlan["farmPlan"] }).plan)?.market_strategy?.action || "Generated Strategy"}</h4>
+                 <p className="text-xs text-secondary/60 line-clamp-2">{(record.farmPlan || (record as ActivePlan & { plan?: ActivePlan["farmPlan"] }).plan)?.farm_summary?.key_issue}</p>
                </Card>
              ))
           )}

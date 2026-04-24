@@ -11,9 +11,10 @@ import RiskBadge from './components/ui/RiskBadge';
 import WeatherWidget from './components/WeatherWidget';
 import MarketWidget from './components/MarketWidget';
 import Timeline from './components/Timeline';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { X } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
 import { ActivePlan } from './types/farm';
 
 function DashboardContent() {
@@ -24,9 +25,10 @@ function DashboardContent() {
   const [activePlan, setActivePlan] = useState<ActivePlan | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [todayTask, setTodayTask] = useState("Routine field inspection and boundary check.");
+  const resolvedPlan = activePlan?.farmPlan || (activePlan as (ActivePlan & { plan?: ActivePlan["farmPlan"] }) | null)?.plan || null;
 
   useEffect(() => {
-    if (activePlan?.farmPlan?.timeline && activePlan?.appliedAt) {
+    if (resolvedPlan?.timeline && activePlan?.appliedAt) {
       // @ts-expect-error - Firestore Timestamp cast
       const appliedDate = activePlan.appliedAt.seconds 
         // @ts-expect-error - Firestore Timestamp cast
@@ -37,14 +39,14 @@ function DashboardContent() {
       const diffDays = Math.floor((now - appliedDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       
       const task = 
-        activePlan.farmPlan.timeline.reduce((prev: { day: number, action: string } | null, curr: { day: number, action: string }) => {
+        resolvedPlan.timeline.reduce((prev: { day: number, action: string } | null, curr: { day: number, action: string }) => {
         if (curr.day <= diffDays && curr.day > (prev?.day || -1)) return curr;
         return prev;
       }, null);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (task) setTodayTask(task.action);
     }
-  }, [activePlan]);
+  }, [activePlan, resolvedPlan]);
 
   useEffect(() => {
     if (searchParams.get('applied') === 'true') {
@@ -70,24 +72,19 @@ function DashboardContent() {
             return;
           }
 
-          const [userRes, planRes] = await Promise.all([
-            !savedUser ? fetch(`/api/user`, {
-              headers: { 'x-user-id': authUser.uid }
-            }) : Promise.resolve(null),
+          const [userSnap, planRes] = await Promise.all([
+            !savedUser ? getDoc(doc(db, 'users', authUser.uid)) : Promise.resolve(null),
             fetch(`/api/active-plan`, {
               headers: { 'x-user-id': authUser.uid }
             })
           ]);
 
-          if (userRes && userRes.ok) {
-            const data = await userRes.json();
-            if (data.success && data.user) {
-              localStorage.setItem('afm_user', JSON.stringify(data.user));
-            } else {
-              router.push('/onboarding');
-              return;
-            }
-          } else if (!savedUser && userRes && !userRes.ok) {
+          if (userSnap && userSnap.exists()) {
+            localStorage.setItem('afm_user', JSON.stringify({
+              id: userSnap.id,
+              ...userSnap.data(),
+            }));
+          } else if (!savedUser) {
             router.push('/onboarding');
             return;
           }
@@ -117,8 +114,8 @@ function DashboardContent() {
     );
   }
 
-  const riskLevel = activePlan?.farmPlan?.farm_summary?.overall_risk || "Normal";
-  const keyRecommendation = activePlan?.farmPlan?.farm_summary?.key_issue || "Maintain standard crop monitoring and moisture levels.";
+  const riskLevel = resolvedPlan?.farm_summary?.overall_risk || "Normal";
+  const keyRecommendation = resolvedPlan?.farm_summary?.key_issue || "Maintain standard crop monitoring and moisture levels.";
   
   return (
     <div className="p-6 flex flex-col gap-6 animate-in fade-in duration-500">
@@ -201,23 +198,32 @@ function DashboardContent() {
         <div className="relative z-10 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60">Field Condition</span>
-            <RiskBadge level={riskLevel} />
+            {activePlan ? <RiskBadge level={riskLevel} /> : <div className="px-2 py-1 bg-white/10 rounded text-[10px] font-bold uppercase tracking-widest">Awaiting Analysis</div>}
           </div>
           
           <div className="flex flex-col gap-1">
-            <p className="text-sm opacity-80 font-medium tracking-tight">Today&apos;s Primary Task</p>
+            <p className="text-sm opacity-80 font-medium tracking-tight">{activePlan ? "Today's Primary Task" : "Initial Step"}</p>
             <h3 className="text-xl font-bold leading-tight">
-              {todayTask}
+              {activePlan ? todayTask : "Generate your first farm strategy to receive AI-driven tasks."}
             </h3>
           </div>
-
+          
           <div className="flex items-center gap-2 pt-2 text-[10px] font-bold uppercase tracking-widest text-accent">
             <Info size={14} />
-            {activePlan ? "Based on active AI strategy" : "Based on standard monitoring"}
+            {activePlan ? "Based on active AI strategy" : "System standby"}
           </div>
         </div>
         <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/5 rounded-full blur-2xl" />
       </Card>
+
+      {!resolvedPlan && (
+        <Card className="flex flex-col gap-2 border-l-4 border-accent">
+          <h3 className="text-sm font-bold text-primary uppercase tracking-widest">No Active Plan Yet</h3>
+          <p className="text-xs text-secondary/70 leading-relaxed">
+            The dashboard is currently showing baseline monitoring only. Generate and apply a fresh plan to unlock your personalized 30-day strategy.
+          </p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4">
         <WeatherWidget />
@@ -234,22 +240,29 @@ function DashboardContent() {
              Strategic Path
            </h4>
            <p className="text-xs text-secondary/80 leading-relaxed font-medium italic">
-             &quot;{keyRecommendation}&quot;
+             {activePlan 
+               ? `"${keyRecommendation}"` 
+               : "No active strategy found. Use the button below to analyze your field and generate a custom strategy."}
            </p>
         </div>
       </div>
 
-      {activePlan && (
-        <div className="flex flex-col gap-4 animate-in slide-in-from-bottom-4 duration-700 delay-300">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="font-bold text-sm text-secondary uppercase tracking-widest leading-none">Strategy Roadmap</h3>
-            <div className="px-2 py-1 bg-primary/10 rounded text-[10px] font-black text-primary leading-none uppercase">30 Day Path</div>
-          </div>
-          <Card>
-            <Timeline items={activePlan.farmPlan.timeline} />
-          </Card>
+      <div className="flex flex-col gap-4 animate-in slide-in-from-bottom-4 duration-700 delay-300">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-bold text-sm text-secondary uppercase tracking-widest leading-none">Strategy Roadmap</h3>
+          <div className="px-2 py-1 bg-primary/10 rounded text-[10px] font-black text-primary leading-none uppercase">30 Day Path</div>
         </div>
-      )}
+        <Card>
+          {resolvedPlan ? (
+            <Timeline items={resolvedPlan.timeline || []} />
+          ) : (
+            <div className="py-12 flex flex-col items-center justify-center gap-3 text-secondary/30">
+              <CheckCircle2 size={32} strokeWidth={1.5} />
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em]">Roadmap Not Generated</p>
+            </div>
+          )}
+        </Card>
+      </div>
 
       <Button 
         variant="accent" 

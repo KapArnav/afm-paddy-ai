@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { firestoreServer } from "../../../lib/firestore-server";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,14 +14,16 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Get user document to find activePlanId
-    const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
+    const userSnap = await firestoreServer.collection("users").doc(userId).get();
 
-    if (!userSnap.exists()) {
+    if (!userSnap.exists) {
       return NextResponse.json({ success: true, activePlan: null, message: "User profile not found" });
     }
 
     const userData = userSnap.data();
+    if (!userData) {
+      return NextResponse.json({ success: true, activePlan: null });
+    }
     const activePlanId = userData.activePlanId;
 
     if (!activePlanId) {
@@ -30,10 +31,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Fetch the actual plan data
-    const planRef = doc(db, "farmPlans", activePlanId);
-    const planSnap = await getDoc(planRef);
+    const planSnap = await firestoreServer.collection("farmPlans").doc(activePlanId).get();
 
-    if (!planSnap.exists()) {
+    if (!planSnap.exists) {
       return NextResponse.json({ success: true, activePlan: null }); // or handle as broken link
     }
 

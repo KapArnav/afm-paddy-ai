@@ -34,10 +34,21 @@ As of the latest deployment, the production environment is experiencing a **403 
 ### 1. Environment Configuration
 Create a `.env.local` file with the following:
 ```env
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=asia-southeast1
+WEATHER_API_KEY=your_openweather_api_key
+
 # Shared Firebase Config
 NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=afm-paddy-ai-493808
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-gcp-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=...
 ```
+
+Important: keep `GOOGLE_CLOUD_PROJECT` and `NEXT_PUBLIC_FIREBASE_PROJECT_ID` aligned to the same project unless you are intentionally splitting infrastructure. A mixed setup will cause Vertex AI, Firestore, and Firebase Auth to point at different backends.
 
 ### 2. Manual IAM Fix
 To resolve the current 403 error, run:

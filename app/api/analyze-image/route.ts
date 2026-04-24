@@ -62,31 +62,20 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Build Gemini request
-  const prompt = `You are an agricultural expert analyzing a crop image.
-Identify visible issues such as:
-- nutrient deficiencies
-- pest damage
-- disease symptoms
-- leaf discoloration
-
-Return ONLY valid JSON in this format:
-{
-  "issues": ["...", "..."],
-  "confidence": 0.0 to 1.0
-}
-Do not include markdown or explanations.`;
-
     // 2. Call Vertex AI via the new queued client (Task 2 & 6)
     const visionPrompt = "Describe this paddy field's condition. Are there any visible pests, diseases, or nutrient issues? Be technical but concise.";
     
-    // Task 6: use gemini-1.5-flash
+    // Use the same generally available model family as the strategist path.
     const visionRes = await callVertexWithRetry(
-      ["gemini-1.5-flash"],
+      ["gemini-2.5-flash"],
       {
-        contents: [{ parts: [
-          { text: visionPrompt },
-          { inlineData: { mimeType: dynamicMimeType, data: base64Data } }
-        ]}]
+        contents: [{
+          role: "user",
+          parts: [
+            { text: visionPrompt },
+            { inlineData: { mimeType: dynamicMimeType, data: base64Data } }
+          ]
+        }]
       }
     );
 
