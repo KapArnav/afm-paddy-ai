@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../../lib/firebase";
+import { firestoreServer } from "../../../lib/firestore-server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,18 +13,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Update the farm plan status
-    const planRef = doc(db, "farmPlans", planId);
-    await updateDoc(planRef, {
+    await firestoreServer.collection("farmPlans").doc(planId).update({
       status: "active",
-      appliedAt: serverTimestamp(),
+      appliedAt: new Date(),
     });
 
     // 2. Link it as the user's active plan
-    const userRef = doc(db, "users", userId);
-    await updateDoc(userRef, {
+    await firestoreServer.collection("users").doc(userId).set({
       activePlanId: planId,
-      updatedAt: serverTimestamp(),
-    });
+      updatedAt: new Date(),
+    }, { merge: true });
 
     return NextResponse.json({ success: true, message: "Plan applied successfully" });
   } catch (error: unknown) {

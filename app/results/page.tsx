@@ -20,6 +20,7 @@ import RiskBadge from '../components/ui/RiskBadge';
 import Timeline from '../components/Timeline';
 import Button from '../components/ui/Button';
 import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { AnalysisResult, FarmPlan } from '../types/farm';
 
 const ResultsPage = () => {
@@ -28,20 +29,37 @@ const ResultsPage = () => {
   const [showReasoning, setShowReasoning] = useState(false);
   const [insights, setInsights] = useState({ marketPotential: 0, strategyGain: 0 });
   const [applying, setApplying] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const handleApply = async () => {
-    if (typeof window === "undefined" || !auth?.currentUser || !data?.planId) {
-      alert("Application failed: Not authenticated or plan ID missing.");
+    if (typeof window === "undefined") {
+      alert("Application failed: Browser session unavailable.");
       return;
     }
-    
+
+    if (!authReady) {
+      alert("Authentication is still loading. Please try again in a moment.");
+      return;
+    }
+
+    if (!authUserId) {
+      alert("Application failed: You are not signed in.");
+      return;
+    }
+
+    if (!data?.planId) {
+      alert("This plan was not saved successfully, so it cannot be applied. Generate a fresh plan and try again.");
+      return;
+    }
+
     setApplying(true);
     try {
       const res = await fetch('/api/apply-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: auth.currentUser?.uid,
+          userId: authUserId,
           planId: data.planId
         })
       });
@@ -73,9 +91,28 @@ const ResultsPage = () => {
     }
   }, [router]);
 
+  useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUserId(user?.uid || null);
+      setAuthReady(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   if (!data) return null;
 
-  const plan = data?.plan as FarmPlan;
+  const plan = (data?.plan || (data as AnalysisResult & { farmPlan?: FarmPlan }).farmPlan) as FarmPlan | undefined;
+  if (!plan) {
+    return null;
+  }
+  const timelineItems = Array.isArray(plan.timeline) ? plan.timeline : [];
+  const reasoningPoints = Array.isArray(plan.ai_reasoning) ? plan.ai_reasoning : [];
 
   // Fallback for missing market strategy (Stability Audit)
   const marketStrategy = plan.market_strategy?.action 
@@ -170,7 +207,13 @@ const ResultsPage = () => {
           </div>
         </div>
         <Card>
-          <Timeline items={plan.timeline} />
+          {timelineItems.length > 0 ? (
+            <Timeline items={timelineItems} />
+          ) : (
+            <div className="text-xs font-medium text-secondary/60 italic">
+              No scheduled actions were returned for this plan.
+            </div>
+          )}
         </Card>
       </div>
 
@@ -189,16 +232,22 @@ const ResultsPage = () => {
         
         {showReasoning && (
           <Card className="flex flex-col gap-4 bg-white/50 animate-in slide-in-from-top-2 duration-300">
-            {plan.ai_reasoning.map((point: string, i: number) => (
-              <div key={i} className="flex gap-3 items-start border-b border-secondary/5 pb-3 last:border-none last:pb-0">
-                <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-black text-primary shrink-0">
-                  {i+1}
+            {reasoningPoints.length > 0 ? (
+              reasoningPoints.map((point: string, i: number) => (
+                <div key={i} className="flex gap-3 items-start border-b border-secondary/5 pb-3 last:border-none last:pb-0">
+                  <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-black text-primary shrink-0">
+                    {i+1}
+                  </div>
+                  <p className="text-xs font-medium text-secondary/80 leading-relaxed italic">
+                    {point}
+                  </p>
                 </div>
-                <p className="text-xs font-medium text-secondary/80 leading-relaxed italic">
-                  {point}
-                </p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-xs font-medium text-secondary/60 italic">
+                No AI reasoning details were returned for this plan.
+              </p>
+            )}
           </Card>
         )}
       </div>
@@ -207,7 +256,7 @@ const ResultsPage = () => {
       <Button 
         variant="primary" 
         fullWidth 
-        disabled={applying}
+        disabled={applying || !data?.planId}
         className="mt-4 py-5"
         onClick={handleApply}
       >

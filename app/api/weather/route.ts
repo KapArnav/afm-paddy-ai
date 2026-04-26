@@ -4,7 +4,7 @@ export async function GET(req: NextRequest) {
   console.log("WEATHER API HIT");
 
   try {
-    const apiKey = process.env.WEATHER_API_KEY;
+    const apiKey = process.env.WEATHER_API_KEY || "ed559c7e4b8c594fca1381334737da3f";
     if (!apiKey) {
       return NextResponse.json(
         { error: "WEATHER_API_KEY is not configured" },
